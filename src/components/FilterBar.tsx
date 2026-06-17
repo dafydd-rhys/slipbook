@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect, useCallback } from 'react';
 import { Bet, BetStats, FilterType } from '@/lib/types';
 
 const FILTERS: { key: FilterType; label: string }[] = [
@@ -57,7 +57,10 @@ interface Props {
 }
 
 export default function FilterBar({ active, onChange, stats }: Props) {
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const scrollRef  = useRef<HTMLDivElement>(null);
+  const dragging   = useRef(false);
+  const dragStartX = useRef(0);
+  const dragScrollL = useRef(0);
   const [canL, setCanL] = useState(false);
   const [canR, setCanR] = useState(true);
   const pnlPos   = stats.pnl >= 0;
@@ -84,22 +87,51 @@ export default function FilterBar({ active, onChange, stats }: Props) {
     scrollRef.current?.scrollBy({ left: dir === 'left' ? -160 : 160, behavior: 'smooth' });
   }
 
+  const onDragStart = useCallback((e: React.MouseEvent) => {
+    const el = scrollRef.current;
+    if (!el) return;
+    dragging.current = true;
+    dragStartX.current = e.pageX - el.offsetLeft;
+    dragScrollL.current = el.scrollLeft;
+    el.style.cursor = 'grabbing';
+    el.style.userSelect = 'none';
+  }, []);
+
+  const onDragMove = useCallback((e: React.MouseEvent) => {
+    if (!dragging.current || !scrollRef.current) return;
+    e.preventDefault();
+    const x = e.pageX - scrollRef.current.offsetLeft;
+    scrollRef.current.scrollLeft = dragScrollL.current - (x - dragStartX.current);
+  }, []);
+
+  const onDragEnd = useCallback(() => {
+    dragging.current = false;
+    if (scrollRef.current) {
+      scrollRef.current.style.cursor = 'grab';
+      scrollRef.current.style.userSelect = '';
+    }
+  }, []);
+
   const arrow = (dir: 'left' | 'right', can: boolean) => (
     <button
       onClick={() => scroll(dir)}
       aria-label={`Scroll ${dir}`}
       style={{
-        flexShrink: 0, width: 26, height: 26, borderRadius: '50%',
+        flexShrink: 0, width: 28, height: 28, borderRadius: '50%',
         border: `1px solid ${can ? '#2a2a52' : '#141428'}`,
         background: 'transparent',
-        color: can ? '#475569' : '#1e1e3e',
-        fontSize: 14, cursor: can ? 'pointer' : 'default',
+        color: can ? '#64748b' : '#1e1e3e',
+        cursor: can ? 'pointer' : 'default',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         transition: 'all 0.15s', pointerEvents: can ? 'auto' : 'none',
-        lineHeight: 1,
       }}
     >
-      {dir === 'left' ? '‹' : '›'}
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+        {dir === 'left'
+          ? <path d="M9 2.5L5 7L9 11.5" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/>
+          : <path d="M5 2.5L9 7L5 11.5" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/>
+        }
+      </svg>
     </button>
   );
 
@@ -119,7 +151,15 @@ export default function FilterBar({ active, onChange, stats }: Props) {
       {/* ── Filter pills ── */}
       <div style={{ paddingTop: 16, paddingBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
         {arrow('left', canL)}
-        <div ref={scrollRef} className="no-scrollbar" style={{ display: 'flex', gap: 6, overflowX: 'auto', flex: 1 }}>
+        <div
+          ref={scrollRef}
+          className="no-scrollbar"
+          style={{ display: 'flex', gap: 6, overflowX: 'auto', flex: 1, minWidth: 0, cursor: 'grab' }}
+          onMouseDown={onDragStart}
+          onMouseMove={onDragMove}
+          onMouseUp={onDragEnd}
+          onMouseLeave={onDragEnd}
+        >
           {FILTERS.map(f => {
             const isActive = f.key === active;
             return (
@@ -148,15 +188,12 @@ export default function FilterBar({ active, onChange, stats }: Props) {
       </div>
 
       {/* ── Stats row ── */}
-      <div style={{ display: 'flex', marginTop: 16, marginBottom: 4, paddingBottom: 16, borderBottom: '1px solid #1a1a38' }}>
+      <div className="stats-grid" style={{ marginTop: 16, marginBottom: 4, paddingBottom: 16, borderBottom: '1px solid #1a1a38' }}>
         {statItems.map((item, i) => (
           <div
             key={i}
-            style={{
-              flex: '1 1 0', textAlign: 'center',
-              borderRight: i < statItems.length - 1 ? '1px solid #1a1a38' : undefined,
-              padding: '0 4px',
-            }}
+            className="stats-item"
+            style={{ borderRight: i < statItems.length - 1 ? '1px solid #1a1a38' : undefined }}
           >
             <div style={{ fontSize: 16, fontWeight: 700, color: item.color, lineHeight: 1.2, letterSpacing: '-0.02em' }}>
               {item.value}

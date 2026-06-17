@@ -6,12 +6,11 @@ const LOCAL_FILE = path.join(process.cwd(), 'data', 'bets.json');
 const BETS_KEY = 'bets';
 
 async function getRedis() {
-  if (!process.env.UPSTASH_REDIS_REST_URL) return null;
+  const url   = process.env.UPSTASH_REDIS_REST_URL ?? process.env.KV_REST_API_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN ?? process.env.KV_REST_API_TOKEN;
+  if (!url || !token) return null;
   const { Redis } = await import('@upstash/redis');
-  return new Redis({
-    url: process.env.UPSTASH_REDIS_REST_URL,
-    token: process.env.UPSTASH_REDIS_REST_TOKEN!,
-  });
+  return new Redis({ url, token });
 }
 
 export async function readBets(): Promise<BetsData> {
@@ -48,7 +47,7 @@ export async function updateBet(id: string, updates: Partial<Bet>): Promise<Bet 
   const data = await readBets();
   const idx = data.bets.findIndex(b => b.id === id);
   if (idx === -1) return null;
-  data.bets[idx] = { ...data.bets[idx], ...updates };
+  data.bets[idx] = { ...data.bets[idx], ...updates, id: data.bets[idx].id };
   await writeBets(data);
   return data.bets[idx];
 }

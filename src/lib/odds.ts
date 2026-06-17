@@ -28,6 +28,6 @@ export function formatOdds(decimal: number, format: OddsFormat): string {
   switch (format) {
     case 'fraction': return decimalToFraction(decimal);
     case 'us': return decimalToUS(decimal);
-    default: return decimal % 1 === 0 ? decimal.toFixed(1) : String(parseFloat(decimal.toFixed(2)));
+    default: return decimal.toFixed(2);
   }
 }

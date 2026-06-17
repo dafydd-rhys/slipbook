@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { readBets } from '@/lib/db';
 
 export async function GET() {
-  const usingRedis = !!process.env.UPSTASH_REDIS_REST_URL;
+  const usingRedis = !!(process.env.UPSTASH_REDIS_REST_URL ?? process.env.KV_REST_API_URL);
 
   try {
     const data = await readBets();

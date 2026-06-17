@@ -17,7 +17,7 @@ function ResultBadge({ result }: { result: BetResult }) {
     won:     { bg: 'rgba(16,185,129,0.12)', color: '#10b981', label: 'WON' },
     lost:    { bg: 'rgba(239,68,68,0.10)',  color: '#ef4444', label: 'LOST' },
     void:    { bg: 'rgba(100,116,139,0.12)', color: '#94a3b8', label: 'VOID' },
-    pending: { bg: 'rgba(245,158,11,0.12)', color: '#f59e0b', label: 'PEND' },
+    pending: { bg: 'rgba(245,158,11,0.12)', color: '#f59e0b', label: 'PENDING' },
   };
   const s = cfg[result];
   return (

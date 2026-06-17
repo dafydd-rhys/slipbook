@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import BetCard from '@/components/BetCard';
 import { Bet, BetLeg, BetResult, BetSubLeg, BetType, SportOutcome, SportType } from '@/lib/types';
 
-const ADMIN_KEY = 'saucyslips';
+const ADMIN_KEY = '131275';
 const CONTENT_WIDTH = 720;
 
 // ── Style constants ───────────────────────────────────────────────────────────
@@ -291,8 +291,8 @@ function buildBet(form: BetForm, id: string = 'preview'): Bet {
 // ── Main component ────────────────────────────────────────────────────────────
 export default function AdminPage() {
   const [authed, setAuthed]       = useState(false);
-  const [pw, setPw]               = useState('');
-  const [pwError, setPwError]     = useState('');
+  const [pin, setPin]             = useState('');
+  const [pinError, setPinError]   = useState(false);
   const [bets, setBets]           = useState<Bet[]>([]);
   const [form, setForm]           = useState<BetForm>(emptyForm());
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -316,10 +316,24 @@ export default function AdminPage() {
     setBets(await fetch('/api/bets').then(r => r.json()));
   }
 
-  function handlePwSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (pw === ADMIN_KEY) { sessionStorage.setItem('admin', btoa(ADMIN_KEY)); setAuthed(true); }
-    else setPwError('Wrong password');
+  function handlePinDigit(d: string) {
+    if (pinError) { setPin(''); setPinError(false); }
+    const next = (pinError ? '' : pin) + d;
+    if (next.length < ADMIN_KEY.length) { setPin(next); return; }
+    // full PIN entered
+    if (next === ADMIN_KEY) {
+      sessionStorage.setItem('admin', btoa(ADMIN_KEY));
+      setAuthed(true);
+    } else {
+      setPin(next);
+      setPinError(true);
+      setTimeout(() => { setPin(''); setPinError(false); }, 600);
+    }
+  }
+
+  function handlePinBack() {
+    if (pinError) { setPin(''); setPinError(false); return; }
+    setPin(p => p.slice(0, -1));
   }
 
   function updateLeg<K extends keyof LegForm>(i: number, field: K, val: LegForm[K]) {
@@ -425,23 +439,65 @@ export default function AdminPage() {
   }
 
   // ── Auth gate ──────────────────────────────────────────────────────────────
-  if (!authed) return (
-    <div style={{ minHeight: '80vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-      <div style={{ background: '#16162e', border: '1px solid #2a2a52', borderRadius: 16, padding: '28px 24px', width: '100%', maxWidth: 320 }}>
-        <h1 style={{ fontSize: 16, fontWeight: 700, color: '#f1f5f9', marginBottom: 4 }}>Admin Panel</h1>
-        <p style={{ fontSize: 12, color: '#475569', marginBottom: 20 }}>Enter password to manage bets</p>
-        <form onSubmit={handlePwSubmit}>
-          <input type="password" value={pw} onChange={e => { setPw(e.target.value); setPwError(''); }}
-            placeholder="Password" autoFocus
-            style={{ ...INPUT, marginBottom: 8, border: `1px solid ${pwError ? '#ef4444' : '#2a2a52'}` }} />
-          {pwError && <p style={{ fontSize: 12, color: '#ef4444', marginBottom: 8 }}>{pwError}</p>}
-          <button type="submit" style={{ width: '100%', background: '#7c3aed', border: 'none', borderRadius: 8, color: '#fff', fontSize: 14, fontWeight: 700, padding: 10, cursor: 'pointer', marginTop: 4 }}>
-            Enter
-          </button>
-        </form>
+  if (!authed) {
+    const PIN_LEN = ADMIN_KEY.length;
+    const PAD = ['1','2','3','4','5','6','7','8','9','','0','⌫'];
+    return (
+      <div style={{ minHeight: '80vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+        <div style={{ width: '100%', maxWidth: 280, textAlign: 'center' }}>
+          <div style={{ fontSize: 13, color: '#475569', fontWeight: 600, letterSpacing: '0.08em', marginBottom: 28 }}>
+            ENTER PIN
+          </div>
+
+          {/* Dots */}
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 14, marginBottom: 36 }}>
+            {Array.from({ length: PIN_LEN }).map((_, i) => {
+              const filled = i < pin.length;
+              return (
+                <div key={i} style={{
+                  width: 14, height: 14, borderRadius: '50%',
+                  background: pinError ? '#ef4444' : filled ? '#7c3aed' : 'transparent',
+                  border: `2px solid ${pinError ? '#ef4444' : filled ? '#7c3aed' : '#2a2a52'}`,
+                  transition: 'all 0.15s',
+                }} />
+              );
+            })}
+          </div>
+
+          {/* Keypad */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+            {PAD.map((key, i) => {
+              if (key === '') return <div key={i} />;
+              const isBack = key === '⌫';
+              return (
+                <button
+                  key={i}
+                  onClick={() => isBack ? handlePinBack() : handlePinDigit(key)}
+                  disabled={!isBack && pin.length >= PIN_LEN}
+                  style={{
+                    background: isBack ? 'transparent' : '#16162e',
+                    border: `1px solid ${isBack ? 'transparent' : '#2a2a52'}`,
+                    borderRadius: 12,
+                    color: isBack ? '#475569' : '#f1f5f9',
+                    fontSize: isBack ? 20 : 22,
+                    fontWeight: 600,
+                    height: 64,
+                    cursor: 'pointer',
+                    transition: 'all 0.1s',
+                    opacity: (!isBack && pin.length >= PIN_LEN) ? 0.3 : 1,
+                  }}
+                  onMouseEnter={e => { if (!isBack) e.currentTarget.style.background = '#1e1e42'; e.currentTarget.style.borderColor = '#4a4a8a'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = isBack ? 'transparent' : '#16162e'; e.currentTarget.style.borderColor = isBack ? 'transparent' : '#2a2a52'; }}
+                >
+                  {key}
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </div>
-    </div>
-  );
+    );
+  }
 
   // ── Panel ──────────────────────────────────────────────────────────────────
   return (

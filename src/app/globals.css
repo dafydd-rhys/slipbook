@@ -95,3 +95,26 @@ input[type="checkbox"]:checked::after {
 /* ── Hide scrollbar utility ── */
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* ── Stats grid ── */
+.stats-grid {
+  display: flex;
+  flex-wrap: nowrap;
+}
+.stats-item {
+  flex: 1 1 0;
+  text-align: center;
+  padding: 0 4px;
+}
+@media (max-width: 500px) {
+  .stats-grid {
+    flex-wrap: wrap;
+  }
+  .stats-item {
+    flex: 1 1 25%;
+    padding: 6px 4px 0;
+  }
+  .stats-item + .stats-item {
+    border-left: none !important;
+  }
+}

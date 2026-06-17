@@ -8,7 +8,7 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  if (req.headers.get('x-admin-key') !== 'saucyslips') {
+  if (req.headers.get('x-admin-key') !== '131275') {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   const body = await req.json() as Omit<Bet, 'id'>;
