@@ -3,32 +3,34 @@ import path from 'path';
 import { BetsData, Bet } from './types';
 
 const LOCAL_FILE = path.join(process.cwd(), 'data', 'bets.json');
-const KV_KEY = 'bets';
+const BETS_KEY = 'bets';
 
-async function getKV() {
-  if (!process.env.KV_REST_API_URL) return null;
-  const { kv } = await import('@vercel/kv');
-  return kv;
+async function getRedis() {
+  if (!process.env.UPSTASH_REDIS_REST_URL) return null;
+  const { Redis } = await import('@upstash/redis');
+  return new Redis({
+    url: process.env.UPSTASH_REDIS_REST_URL,
+    token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+  });
 }
 
 export async function readBets(): Promise<BetsData> {
-  const kv = await getKV();
-  if (kv) {
-    const bets = await kv.get<Bet[]>(KV_KEY);
+  const redis = await getRedis();
+  if (redis) {
+    const bets = await redis.get<Bet[]>(BETS_KEY);
     return { bets: bets ?? [] };
   }
   try {
-    const raw = await fs.readFile(LOCAL_FILE, 'utf-8');
-    return JSON.parse(raw) as BetsData;
+    return JSON.parse(await fs.readFile(LOCAL_FILE, 'utf-8')) as BetsData;
   } catch {
     return { bets: [] };
   }
 }
 
 export async function writeBets(data: BetsData): Promise<void> {
-  const kv = await getKV();
-  if (kv) {
-    await kv.set(KV_KEY, data.bets);
+  const redis = await getRedis();
+  if (redis) {
+    await redis.set(BETS_KEY, data.bets);
     return;
   }
   await fs.mkdir(path.dirname(LOCAL_FILE), { recursive: true });
