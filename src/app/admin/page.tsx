@@ -44,6 +44,12 @@ const BET_TYPES: { value: BetType; label: string }[] = [
   { value: 'lucky63',     label: 'Lucky 63' },
 ];
 
+function autoTitle(type: BetType, legCount: number): string {
+  if (type === 'acca') return `${legCount}-Fold Accumulator`;
+  if (type === 'system') return `${legCount}-Fold System`;
+  return BET_TYPES.find(t => t.value === type)?.label ?? 'Bet';
+}
+
 const SPORTS: { value: SportType; emoji: string; label: string }[] = [
   { value: 'football',     emoji: '⚽', label: 'Football' },
   { value: 'tennis',       emoji: '🎾', label: 'Tennis' },
@@ -55,8 +61,66 @@ const SPORTS: { value: SportType; emoji: string; label: string }[] = [
   { value: 'rugby',        emoji: '🏉', label: 'Rugby' },
   { value: 'boxing',       emoji: '🥊', label: 'Boxing' },
   { value: 'mma',          emoji: '🥋', label: 'MMA' },
-  { value: 'other',        emoji: '🎯', label: 'Other' },
+  { value: 'darts',        emoji: '🎯', label: 'Darts' },
+  { value: 'other',        emoji: '❔', label: 'Other' },
 ];
+
+const COMMON_MARKETS = [
+  'Match Result', 'Both Teams to Score', 'Over 2.5 Goals', 'Under 2.5 Goals',
+  'Correct Score', 'Anytime Goalscorer', 'First Goalscorer', 'Double Chance',
+  'Draw No Bet', 'Handicap', 'Outright Winner', 'Set Betting', 'To Win Match',
+];
+
+const ODDS_PRESETS = ['2.00', '2.50', '3.00', '4.00', '5.00', '10.00'];
+const STAKE_PRESETS = ['5', '10', '15', '20', '25', '50'];
+
+const LAST_SPORT_KEY = 'strz_last_sport';
+
+// ── Small reusable UI bits ─────────────────────────────────────────────────────
+function PresetChips({ values, onPick, prefix = '' }: { values: string[]; onPick: (v: string) => void; prefix?: string }) {
+  return (
+    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+      {values.map(v => (
+        <button key={v} type="button" onClick={() => onPick(v)} style={{
+          background: 'transparent', border: '1px solid #2a2a52', borderRadius: 6,
+          color: '#a78bfa', fontSize: 11, padding: '3px 8px', cursor: 'pointer',
+        }}>
+          {prefix}{v}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function MarketQuickPick({ onPick }: { onPick: (v: string) => void }) {
+  return (
+    <select value="" onChange={e => { if (e.target.value) onPick(e.target.value); }} style={{ ...SELECT, marginBottom: 6 }}>
+      <option value="">Quick pick…</option>
+      {COMMON_MARKETS.map(m => <option key={m} value={m}>{m}</option>)}
+    </select>
+  );
+}
+
+function ScoreStepper({ label, value, onChange }: { label: string; value: number | undefined; onChange: (v: number) => void }) {
+  const v = value ?? 0;
+  return (
+    <div>
+      <label style={LABEL}>{label}</label>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <button type="button" disabled={v <= 0} onClick={() => onChange(Math.max(0, v - 1))} style={{
+          background: 'transparent', border: '1px solid #2a2a52', borderRadius: 6,
+          color: '#a78bfa', fontSize: 14, fontWeight: 700, width: 28, height: 28, cursor: v <= 0 ? 'not-allowed' : 'pointer',
+          opacity: v <= 0 ? 0.35 : 1, flexShrink: 0,
+        }}>−</button>
+        <span style={{ fontSize: 16, fontWeight: 700, color: '#f1f5f9', minWidth: 20, textAlign: 'center' }}>{v}</span>
+        <button type="button" onClick={() => onChange(v + 1)} style={{
+          background: 'transparent', border: '1px solid #2a2a52', borderRadius: 6,
+          color: '#a78bfa', fontSize: 14, fontWeight: 700, width: 28, height: 28, cursor: 'pointer', flexShrink: 0,
+        }}>+</button>
+      </div>
+    </div>
+  );
+}
 
 // ── Shared mini modal ─────────────────────────────────────────────────────────
 interface ConfirmDialogProps {
@@ -117,6 +181,13 @@ function OutcomeFields({ sport, outcome, onChange }: {
         placeholder="e.g. 6-4, 7-5, 3-6, 6-2" style={INPUT} />
     </div>
   );
+  if (sport === 'darts') return (
+    <div style={FIELD}>
+      <label style={LABEL}>Sets/Legs Score</label>
+      <input value={outcome.sets ?? ''} onChange={e => set('sets', e.target.value)}
+        placeholder="e.g. 3-1 (sets)" style={INPUT} />
+    </div>
+  );
   if (sport === 'horse_racing') return (
     <div style={FIELD}>
       <label style={LABEL}>Finish Position</label>
@@ -147,14 +218,8 @@ function OutcomeFields({ sport, outcome, onChange }: {
                              ['FT','AET','Pens'];
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
-      <div>
-        <label style={LABEL}>Home Score</label>
-        <input type="number" min="0" value={outcome.homeScore ?? ''} onChange={e => set('homeScore', parseInt(e.target.value))} style={INPUT} />
-      </div>
-      <div>
-        <label style={LABEL}>Away Score</label>
-        <input type="number" min="0" value={outcome.awayScore ?? ''} onChange={e => set('awayScore', parseInt(e.target.value))} style={INPUT} />
-      </div>
+      <ScoreStepper label="Home Score" value={outcome.homeScore} onChange={v => set('homeScore', v)} />
+      <ScoreStepper label="Away Score" value={outcome.awayScore} onChange={v => set('awayScore', v)} />
       <div>
         <label style={LABEL}>Status</label>
         <select value={outcome.matchStatus ?? 'FT'} onChange={e => set('matchStatus', e.target.value)} style={SELECT}>
@@ -186,22 +251,29 @@ function SubLegEditor({ subLegs, onChange }: {
         </button>
       </div>
       {subLegs.map((sl, i) => (
-        <div key={i} style={{ display: 'flex', gap: 6, marginBottom: 6, alignItems: 'center' }}>
-          <input value={sl.selection} onChange={e => update(i, 'selection', e.target.value)}
-            placeholder="Selection" style={{ ...INPUT, flex: 2 }} />
-          <input value={sl.market} onChange={e => update(i, 'market', e.target.value)}
-            placeholder="Market" style={{ ...INPUT, flex: 2 }} />
-          <select value={sl.result} onChange={e => update(i, 'result', e.target.value as BetResult)}
-            style={{ ...SELECT, flex: 1, color: RESULT_COLORS[sl.result] }}>
-            <option value="pending">Pending</option>
-            <option value="won">Won</option>
-            <option value="lost">Lost</option>
-            <option value="void">Void</option>
+        <div key={i} style={{ marginBottom: 8 }}>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <input value={sl.selection} onChange={e => update(i, 'selection', e.target.value)}
+              placeholder="Selection" style={{ ...INPUT, flex: 2 }} />
+            <input value={sl.market} onChange={e => update(i, 'market', e.target.value)}
+              placeholder="Market" style={{ ...INPUT, flex: 2 }} />
+            <select value={sl.result} onChange={e => update(i, 'result', e.target.value as BetResult)}
+              style={{ ...SELECT, flex: 1, color: RESULT_COLORS[sl.result] }}>
+              <option value="pending">Pending</option>
+              <option value="won">Won</option>
+              <option value="lost">Lost</option>
+              <option value="void">Void</option>
+            </select>
+            <button type="button" onClick={() => onChange(subLegs.filter((_, j) => j !== i))}
+              style={{ background: 'transparent', border: 'none', color: '#ef444480', fontSize: 14, cursor: 'pointer', padding: 0, flexShrink: 0 }}>
+              ✕
+            </button>
+          </div>
+          <select value="" onChange={e => { if (e.target.value) update(i, 'market', e.target.value); }}
+            style={{ ...SELECT, marginTop: 4, fontSize: 11, padding: '4px 8px' }}>
+            <option value="">Quick pick market…</option>
+            {COMMON_MARKETS.map(m => <option key={m} value={m}>{m}</option>)}
           </select>
-          <button type="button" onClick={() => onChange(subLegs.filter((_, j) => j !== i))}
-            style={{ background: 'transparent', border: 'none', color: '#ef444480', fontSize: 14, cursor: 'pointer', padding: 0, flexShrink: 0 }}>
-            ✕
-          </button>
         </div>
       ))}
     </div>
@@ -212,6 +284,7 @@ function SubLegEditor({ subLegs, onChange }: {
 type LegForm = {
   selection: string; market: string; matchup: string;
   odds: string;          // base odds (always shown)
+  oddsTouched: boolean;  // once true, stops mirroring the main "Total Odds" field
   boostedOdds: string;   // effective boosted odds (shown when isBoosted)
   isBoosted: boolean;
   result: BetResult; sport: SportType;
@@ -228,21 +301,27 @@ type BetForm = {
   legs: LegForm[];
 };
 
-function emptyLeg(): LegForm {
+function lastUsedSport(): SportType {
+  if (typeof window === 'undefined') return 'football';
+  return (localStorage.getItem(LAST_SPORT_KEY) as SportType | null) ?? 'football';
+}
+
+function emptyLeg(sport?: SportType, odds?: string): LegForm {
   return {
-    selection: '', market: '', matchup: '', odds: '1.50', boostedOdds: '',
-    isBoosted: false, result: 'pending', sport: 'football',
+    selection: '', market: '', matchup: '', odds: odds ?? '1.50', oddsTouched: false, boostedOdds: '',
+    isBoosted: false, result: 'pending', sport: sport ?? lastUsedSport(),
     isBetBuilder: false, subLegs: [], outcomeDecided: false, outcome: {},
   };
 }
 
 function emptyForm(): BetForm {
+  const odds = '2.00';
   return {
     date: new Date().toISOString().slice(0, 16),
-    title: '', type: 'acca',
-    odds: '2.00', boostedOdds: '', isBoosted: false,
+    title: autoTitle('acca', 1), type: 'acca',
+    odds, boostedOdds: '', isBoosted: false,
     stake: '10', result: 'pending', returns: '', notes: '',
-    legs: [emptyLeg()],
+    legs: [emptyLeg(undefined, odds)],
   };
 }
 
@@ -266,9 +345,10 @@ function buildBet(form: BetForm, id: string = 'preview'): Bet {
            : form.result === 'lost' ? 0 : undefined,
     notes: form.notes || undefined,
     legs: form.legs.map((l, i): BetLeg => {
+      const legOdds = l.odds || form.odds;
       const effectiveOdds = l.isBoosted && l.boostedOdds
-        ? parseFloat(l.boostedOdds) : parseFloat(l.odds) || 1;
-      const baseOdds = l.isBoosted && l.odds ? parseFloat(l.odds) : undefined;
+        ? parseFloat(l.boostedOdds) : parseFloat(legOdds) || 1;
+      const baseOdds = l.isBoosted && legOdds ? parseFloat(legOdds) : undefined;
       return {
         id: `leg-${Date.now()}-${i}`,
         selection: l.selection || 'Selection',
@@ -299,6 +379,7 @@ export default function AdminPage() {
   const [saving, setSaving]       = useState(false);
   const [tab, setTab]             = useState<'add' | 'manage'>('add');
   const [msg, setMsg]             = useState('');
+  const [titleAuto, setTitleAuto] = useState(true);
 
   // Modals
   const [previewBet, setPreviewBet] = useState<Bet | null>(null);
@@ -341,8 +422,18 @@ export default function AdminPage() {
     legs[i] = { ...legs[i], [field]: val };
     setForm(f => ({ ...f, legs }));
   }
-  function addLeg()         { setForm(f => ({ ...f, legs: [...f.legs, emptyLeg()] })); }
-  function removeLeg(i: number) { setForm(f => ({ ...f, legs: f.legs.filter((_, j) => j !== i) })); }
+  function addLeg() {
+    setForm(f => {
+      const legs = [...f.legs, emptyLeg(f.legs[f.legs.length - 1]?.sport, f.odds)];
+      return { ...f, legs, title: titleAuto ? autoTitle(f.type, legs.length) : f.title };
+    });
+  }
+  function removeLeg(i: number) {
+    setForm(f => {
+      const legs = f.legs.filter((_, j) => j !== i);
+      return { ...f, legs, title: titleAuto ? autoTitle(f.type, legs.length) : f.title };
+    });
+  }
 
   // Submit: show preview for new bet, confirm dialog for edit
   function handleSubmit(e: React.FormEvent) {
@@ -372,7 +463,7 @@ export default function AdminPage() {
     });
     if (res.ok) {
       setMsg(editingId ? 'Bet updated!' : 'Bet added!');
-      setForm(emptyForm()); setEditingId(null);
+      setForm(emptyForm()); setEditingId(null); setTitleAuto(true);
       await loadBets(); setTab('manage');
     } else {
       setMsg('Error saving.');
@@ -397,6 +488,7 @@ export default function AdminPage() {
 
   function handleEdit(bet: Bet) {
     setEditingId(bet.id);
+    setTitleAuto(false);
     setForm({
       date:        new Date(bet.date).toISOString().slice(0, 16),
       title:       bet.title,
@@ -414,6 +506,7 @@ export default function AdminPage() {
         market:        l.market,
         matchup:       l.matchup,
         odds:          l.baseOdds ? String(l.baseOdds) : String(l.odds),
+        oddsTouched:   true,
         boostedOdds:   l.baseOdds ? String(l.odds) : '',
         isBoosted:     l.isBoosted ?? false,
         result:        l.result,
@@ -434,7 +527,7 @@ export default function AdminPage() {
       message: 'Your unsaved edits will be lost.',
       confirmLabel: 'Discard',
       confirmColor: '#ef4444',
-      onConfirm: () => { setConfirm(null); setEditingId(null); setForm(emptyForm()); },
+      onConfirm: () => { setConfirm(null); setEditingId(null); setForm(emptyForm()); setTitleAuto(true); },
     });
   }
 
@@ -585,30 +678,48 @@ export default function AdminPage() {
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
                 <div>
-                  <label style={LABEL}>Date & Time</label>
-                  <input type="datetime-local" value={form.date}
-                    onChange={e => setForm(f => ({ ...f, date: e.target.value }))} style={INPUT} required />
+                  <label style={LABEL}>Date</label>
+                  <input type="date" value={form.date.split('T')[0]}
+                    onChange={e => setForm(f => ({ ...f, date: `${e.target.value}T${f.date.split('T')[1] ?? '00:00'}` }))}
+                    style={INPUT} required />
                 </div>
                 <div>
+                  <label style={LABEL}>Time</label>
+                  <input type="time" value={form.date.split('T')[1] ?? '00:00'}
+                    onChange={e => setForm(f => ({ ...f, date: `${f.date.split('T')[0]}T${e.target.value}` }))}
+                    style={INPUT} required />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+                <div>
                   <label style={LABEL}>Type</label>
-                  <select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value as BetType }))} style={SELECT}>
+                  <select value={form.type} onChange={e => {
+                    const type = e.target.value as BetType;
+                    setForm(f => ({ ...f, type, title: titleAuto ? autoTitle(type, f.legs.length) : f.title }));
+                  }} style={SELECT}>
                     {BET_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                   </select>
                 </div>
+                <div>
+                  <label style={LABEL}>Title</label>
+                  <input value={form.title} onChange={e => { setTitleAuto(false); setForm(f => ({ ...f, title: e.target.value })); }}
+                    placeholder="e.g. 4 Fold Acca" style={INPUT} required />
+                </div>
               </div>
 
-              <div style={FIELD}>
-                <label style={LABEL}>Title</label>
-                <input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
-                  placeholder="e.g. 4 Fold Acca" style={INPUT} required />
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 12 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 4 }}>
                 <div>
                   {/* Label: "Total Odds" normally; "Base Odds" when boosted */}
                   <label style={LABEL}>{form.isBoosted ? 'Base Odds' : 'Total Odds'}</label>
                   <input type="number" step="0.01" min="1" inputMode="decimal" value={form.odds}
-                    onChange={e => setForm(f => ({ ...f, odds: e.target.value }))} style={INPUT} required />
+                    onChange={e => {
+                      const odds = e.target.value;
+                      setForm(f => ({
+                        ...f, odds,
+                        legs: f.legs.map(l => l.oddsTouched ? l : { ...l, odds }),
+                      }));
+                    }} style={INPUT} required />
                 </div>
                 <div>
                   <label style={LABEL}>Stake (£)</label>
@@ -626,6 +737,30 @@ export default function AdminPage() {
                     <option value="void">Void</option>
                   </select>
                 </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 12 }}>
+                <div>
+                  <PresetChips values={ODDS_PRESETS} prefix="@" onPick={v => setForm(f => ({
+                    ...f, odds: v, legs: f.legs.map(l => l.oddsTouched ? l : { ...l, odds: v }),
+                  }))} />
+                  <button type="button" onClick={() => {
+                    const total = form.legs.reduce((acc, l) => {
+                      const odds = l.isBoosted && l.boostedOdds ? parseFloat(l.boostedOdds) : parseFloat(l.odds || form.odds) || 1;
+                      return acc * odds;
+                    }, 1);
+                    setForm(f => ({ ...f, odds: total.toFixed(2) }));
+                  }} style={{
+                    marginTop: 6, background: 'transparent', border: '1px solid #2a2a52', borderRadius: 6,
+                    color: '#a78bfa', fontSize: 11, padding: '3px 8px', cursor: 'pointer',
+                  }}>
+                    🧮 Calc from legs
+                  </button>
+                </div>
+                <div>
+                  <PresetChips values={STAKE_PRESETS} prefix="£" onPick={v => setForm(f => ({ ...f, stake: v }))} />
+                </div>
+                <div />
               </div>
 
               {form.result === 'won' && (
@@ -681,7 +816,11 @@ export default function AdminPage() {
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, marginBottom: 10, alignItems: 'end' }}>
                     <div>
                       <label style={LABEL}>Sport</label>
-                      <select value={leg.sport} onChange={e => updateLeg(i, 'sport', e.target.value as SportType)} style={SELECT}>
+                      <select value={leg.sport} onChange={e => {
+                        const sport = e.target.value as SportType;
+                        updateLeg(i, 'sport', sport);
+                        if (typeof window !== 'undefined') localStorage.setItem(LAST_SPORT_KEY, sport);
+                      }} style={SELECT}>
                         {SPORTS.map(s => <option key={s.value} value={s.value}>{s.emoji} {s.label}</option>)}
                       </select>
                     </div>
@@ -701,6 +840,7 @@ export default function AdminPage() {
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
                     <div>
                       <label style={LABEL}>Market</label>
+                      <MarketQuickPick onPick={v => updateLeg(i, 'market', v)} />
                       <input value={leg.market} onChange={e => updateLeg(i, 'market', e.target.value)}
                         placeholder="e.g. Match Result" style={INPUT} required />
                     </div>
@@ -713,10 +853,20 @@ export default function AdminPage() {
 
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
                     <div>
-                      {/* Label changes to "Base Odds" when boosted */}
+                      {/* Label changes to "Base Odds" when boosted. Optional — mirrors main odds until edited. */}
                       <label style={LABEL}>{leg.isBoosted ? 'Base Odds' : 'Odds'}</label>
                       <input type="number" step="0.01" min="1" inputMode="decimal" value={leg.odds}
-                        onChange={e => updateLeg(i, 'odds', e.target.value)} style={INPUT} required />
+                        onChange={e => {
+                          const legs = [...form.legs];
+                          legs[i] = { ...legs[i], odds: e.target.value, oddsTouched: true };
+                          setForm(f => ({ ...f, legs }));
+                        }}
+                        placeholder={form.odds} style={INPUT} />
+                      <PresetChips values={ODDS_PRESETS} prefix="@" onPick={v => {
+                        const legs = [...form.legs];
+                        legs[i] = { ...legs[i], odds: v, oddsTouched: true };
+                        setForm(f => ({ ...f, legs }));
+                      }} />
                     </div>
                     <div>
                       <label style={LABEL}>Result</label>

@@ -25,6 +25,7 @@ export type SportType =
   | 'rugby'
   | 'boxing'
   | 'mma'
+  | 'darts'
   | 'other';
 
 export type FilterType =

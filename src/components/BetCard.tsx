@@ -7,9 +7,9 @@ function sportEmoji(sport?: SportType): string {
   const map: Record<SportType, string> = {
     football: '⚽', tennis: '🎾', basketball: '🏀', esports: '🎮',
     cricket: '🏏', horse_racing: '🏇', golf: '⛳', rugby: '🏉',
-    boxing: '🥊', mma: '🥋', other: '🎯',
+    boxing: '🥊', mma: '🥋', darts: '🎯', other: '❔',
   };
-  return sport ? map[sport] : '🎯';
+  return sport ? map[sport] : '❔';
 }
 
 function ResultBadge({ result }: { result: BetResult }) {
@@ -66,7 +66,7 @@ function ScoreRow({ leg }: { leg: BetLeg }) {
   let scoreText = '';
 
   if (outcome) {
-    if (sport === 'tennis') {
+    if (sport === 'tennis' || sport === 'darts') {
       label = 'SETS';
       scoreText = outcome.sets ?? '';
     } else if (sport === 'horse_racing') {
