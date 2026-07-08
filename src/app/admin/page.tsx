@@ -69,8 +69,7 @@ const COMMON_MARKETS = [
   'Draw No Bet', 'Handicap', 'Outright Winner', 'Set Betting', 'To Win Match',
 ];
 
-const ODDS_PRESETS = ['2.00', '2.50', '3.00', '4.00', '5.00', '10.00'];
-const STAKE_PRESETS = ['5', '10', '15', '20', '25', '50'];
+const STAKE_PRESETS = ['10', '50', '100', '200'];
 
 const LAST_SPORT_KEY = 'strz_last_sport';
 
@@ -126,14 +125,20 @@ function NumberKeypadInput({ value, onChange, placeholder, style }: {
   value: string; onChange: (v: string) => void; placeholder?: string; style?: React.CSSProperties;
 }) {
   const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState('');
+  function openPad() { setDraft(''); setOpen(true); }
   function tap(key: string) {
-    if (key === '⌫') { onChange(value.slice(0, -1)); return; }
-    if (key === '.' && value.includes('.')) return;
-    onChange(value + key);
+    let next = draft;
+    if (key === 'C') next = '';
+    else if (key === '⌫') next = draft.slice(0, -1);
+    else if (key === '.') next = draft.includes('.') ? draft : draft + '.';
+    else next = draft + key;
+    setDraft(next);
+    onChange(next);
   }
   return (
     <>
-      <input readOnly value={value} placeholder={placeholder} onClick={() => setOpen(true)}
+      <input readOnly value={value} placeholder={placeholder} onClick={openPad}
         style={{ ...INPUT, ...style, cursor: 'pointer' }} />
       {open && (
         <div
@@ -145,7 +150,7 @@ function NumberKeypadInput({ value, onChange, placeholder, style }: {
         >
           <div style={{ background: '#16162e', border: '1px solid #2a2a52', borderRadius: 14, padding: '20px 18px', width: '100%', maxWidth: 260 }}>
             <div style={{ fontSize: 28, fontWeight: 700, color: '#f1f5f9', textAlign: 'center', marginBottom: 16, minHeight: 34 }}>
-              {value || '0'}
+              {draft || '0'}
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
               {['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', '⌫'].map(k => (
@@ -155,12 +160,20 @@ function NumberKeypadInput({ value, onChange, placeholder, style }: {
                 }}>{k}</button>
               ))}
             </div>
-            <button type="button" onClick={() => setOpen(false)} style={{
-              marginTop: 12, width: '100%', background: '#7c3aed', border: 'none', borderRadius: 10,
-              color: '#fff', fontSize: 14, fontWeight: 700, padding: 10, cursor: 'pointer',
-            }}>
-              Done
-            </button>
+            <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+              <button type="button" onClick={() => tap('C')} style={{
+                flex: 1, background: 'transparent', border: '1px solid #2a2a52', borderRadius: 10,
+                color: '#64748b', fontSize: 14, fontWeight: 700, padding: 10, cursor: 'pointer',
+              }}>
+                Clear
+              </button>
+              <button type="button" onClick={() => setOpen(false)} style={{
+                flex: 1, background: '#7c3aed', border: 'none', borderRadius: 10,
+                color: '#fff', fontSize: 14, fontWeight: 700, padding: 10, cursor: 'pointer',
+              }}>
+                Done
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -370,8 +383,9 @@ type LegForm = {
 type BetForm = {
   date: string; title: string; type: BetType;
   odds: string;          // base odds (always shown) — "Total Odds" / "Base Odds"
-  oddsAutoCalc: boolean;  // when true, odds is derived live from the product of leg odds
+  oddsAutoCalc: boolean;  // when true, odds is derived live from the product of legs' base odds
   boostedOdds: string;   // effective boosted odds (shown when isBoosted) — "Boosted Odds"
+  boostedOddsAutoCalc: boolean; // when true, boostedOdds is derived live from legs' boosted-aware odds
   isBoosted: boolean;
   stake: string; result: BetResult; returns: string; notes: string;
   legs: LegForm[];
@@ -390,8 +404,19 @@ function emptyLeg(sport?: SportType, odds?: string): LegForm {
   };
 }
 
-function computeOddsFromLegs(legs: LegForm[]): string {
+// Base odds auto-calc — ignores per-leg boosts, ignores void legs.
+function computeBaseOddsFromLegs(legs: LegForm[]): string {
   const total = legs.reduce((acc, l) => {
+    if (l.result === 'void') return acc;
+    return acc * (parseFloat(l.odds) || 1);
+  }, 1);
+  return total.toFixed(2);
+}
+
+// Boosted odds auto-calc — uses each leg's boosted price if that leg is boosted, ignores void legs.
+function computeBoostedOddsFromLegs(legs: LegForm[]): string {
+  const total = legs.reduce((acc, l) => {
+    if (l.result === 'void') return acc;
     const odds = l.isBoosted && l.boostedOdds ? parseFloat(l.boostedOdds) : parseFloat(l.odds) || 1;
     return acc * odds;
   }, 1);
@@ -403,7 +428,7 @@ function emptyForm(): BetForm {
   return {
     date: new Date().toISOString().slice(0, 16),
     title: autoTitle('acca'), type: 'acca',
-    odds, oddsAutoCalc: false, boostedOdds: '', isBoosted: false,
+    odds, oddsAutoCalc: false, boostedOdds: '', boostedOddsAutoCalc: false, isBoosted: false,
     stake: '10', result: 'pending', returns: '', notes: '',
     legs: [emptyLeg(undefined, odds)],
   };
@@ -501,30 +526,40 @@ export default function AdminPage() {
     setPin(p => p.slice(0, -1));
   }
 
-  function updateLeg<K extends keyof LegForm>(i: number, field: K, val: LegForm[K]) {
-    const legs = [...form.legs];
-    legs[i] = { ...legs[i], [field]: val };
-    setForm(f => ({ ...f, legs }));
-  }
-  // For leg fields that feed into the total odds (odds/boostedOdds/isBoosted) — recalculates
-  // the main Total Odds field live when Auto-calc is on.
+  // Recalculates Total/Boosted Odds live (when their Auto-calc is on) after any leg field change —
+  // covers odds/boostedOdds/isBoosted edits, and marking a leg void (void legs are excluded).
   function updateLegOdds(i: number, patch: Partial<LegForm>) {
     setForm(f => {
       const legs = [...f.legs];
       legs[i] = { ...legs[i], ...patch };
-      return { ...f, legs, odds: f.oddsAutoCalc ? computeOddsFromLegs(legs) : f.odds };
+      return {
+        ...f, legs,
+        odds: f.oddsAutoCalc ? computeBaseOddsFromLegs(legs) : f.odds,
+        boostedOdds: f.boostedOddsAutoCalc ? computeBoostedOddsFromLegs(legs) : f.boostedOdds,
+      };
     });
+  }
+  function updateLeg<K extends keyof LegForm>(i: number, field: K, val: LegForm[K]) {
+    updateLegOdds(i, { [field]: val } as Partial<LegForm>);
   }
   function addLeg() {
     setForm(f => {
       const legs = [...f.legs, emptyLeg(f.legs[f.legs.length - 1]?.sport, f.odds)];
-      return { ...f, legs, odds: f.oddsAutoCalc ? computeOddsFromLegs(legs) : f.odds };
+      return {
+        ...f, legs,
+        odds: f.oddsAutoCalc ? computeBaseOddsFromLegs(legs) : f.odds,
+        boostedOdds: f.boostedOddsAutoCalc ? computeBoostedOddsFromLegs(legs) : f.boostedOdds,
+      };
     });
   }
   function removeLeg(i: number) {
     setForm(f => {
       const legs = f.legs.filter((_, j) => j !== i);
-      return { ...f, legs, odds: f.oddsAutoCalc ? computeOddsFromLegs(legs) : f.odds };
+      return {
+        ...f, legs,
+        odds: f.oddsAutoCalc ? computeBaseOddsFromLegs(legs) : f.odds,
+        boostedOdds: f.boostedOddsAutoCalc ? computeBoostedOddsFromLegs(legs) : f.boostedOdds,
+      };
     });
   }
 
@@ -590,6 +625,7 @@ export default function AdminPage() {
       odds:        bet.baseTotalOdds ? String(bet.baseTotalOdds) : String(bet.totalOdds),
       oddsAutoCalc: false,
       boostedOdds: bet.baseTotalOdds ? String(bet.totalOdds) : '',
+      boostedOddsAutoCalc: false,
       isBoosted:   bet.isBoosted ?? false,
       stake:       String(bet.stake),
       result:      bet.result,
@@ -838,14 +874,11 @@ export default function AdminPage() {
                     }}>
                       <input type="checkbox" checked={form.oddsAutoCalc} onChange={e => {
                         const on = e.target.checked;
-                        setForm(f => ({ ...f, oddsAutoCalc: on, odds: on ? computeOddsFromLegs(f.legs) : f.odds }));
+                        setForm(f => ({ ...f, oddsAutoCalc: on, odds: on ? computeBaseOddsFromLegs(f.legs) : f.odds }));
                       }} />
                       Auto-calc
                     </label>
                   </div>
-                  <PresetChips values={ODDS_PRESETS} prefix="@" onPick={v => setForm(f => ({
-                    ...f, odds: v, legs: f.legs.map(l => l.oddsTouched ? l : { ...l, odds: v }),
-                  }))} />
                 </div>
                 <div>
                   <label style={LABEL}>Stake (£)</label>
@@ -883,8 +916,25 @@ export default function AdminPage() {
                 {form.isBoosted && (
                   <div style={{ flex: 1, minWidth: 140 }}>
                     <label style={LABEL}>Boosted Odds</label>
-                    <NumberKeypadInput value={form.boostedOdds} onChange={v => setForm(f => ({ ...f, boostedOdds: v }))}
-                      placeholder="e.g. 5.50" />
+                    <div style={{ position: 'relative' }}>
+                      {form.boostedOddsAutoCalc ? (
+                        <input readOnly value={form.boostedOdds} style={{ ...INPUT, paddingRight: 88, opacity: 0.85 }} />
+                      ) : (
+                        <NumberKeypadInput value={form.boostedOdds} onChange={v => setForm(f => ({ ...f, boostedOdds: v }))}
+                          placeholder="e.g. 5.50" style={{ paddingRight: 88 }} />
+                      )}
+                      <label style={{
+                        position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
+                        display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: '#a78bfa',
+                        cursor: 'pointer', userSelect: 'none',
+                      }}>
+                        <input type="checkbox" checked={form.boostedOddsAutoCalc} onChange={e => {
+                          const on = e.target.checked;
+                          setForm(f => ({ ...f, boostedOddsAutoCalc: on, boostedOdds: on ? computeBoostedOddsFromLegs(f.legs) : f.boostedOdds }));
+                        }} />
+                        Auto-calc
+                      </label>
+                    </div>
                   </div>
                 )}
               </div>
@@ -958,7 +1008,6 @@ export default function AdminPage() {
                       <label style={LABEL}>{leg.isBoosted ? 'Base Odds' : 'Odds'}</label>
                       <NumberKeypadInput value={leg.odds} placeholder={form.odds}
                         onChange={v => updateLegOdds(i, { odds: v, oddsTouched: true })} />
-                      <PresetChips values={ODDS_PRESETS} prefix="@" onPick={v => updateLegOdds(i, { odds: v, oddsTouched: true })} />
                     </div>
                     <div>
                       <label style={LABEL}>Result</label>
