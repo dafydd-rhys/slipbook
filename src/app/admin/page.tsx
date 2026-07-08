@@ -31,10 +31,10 @@ const RESULT_COLORS: Record<BetResult, string> = {
 };
 
 const BET_TYPES: { value: BetType; label: string }[] = [
+  { value: 'acca',        label: 'Accumulator' },
   { value: 'single',      label: 'Single' },
   { value: 'double',      label: 'Double' },
   { value: 'treble',      label: 'Treble' },
-  { value: 'acca',        label: 'Accumulator' },
   { value: 'bet_builder', label: 'Bet Builder' },
   { value: 'each_way',    label: 'Each Way' },
   { value: 'outright',    label: 'Outright' },
@@ -44,9 +44,7 @@ const BET_TYPES: { value: BetType; label: string }[] = [
   { value: 'lucky63',     label: 'Lucky 63' },
 ];
 
-function autoTitle(type: BetType, legCount: number): string {
-  if (type === 'acca') return `${legCount}-Fold Accumulator`;
-  if (type === 'system') return `${legCount}-Fold System`;
+function autoTitle(type: BetType): string {
   return BET_TYPES.find(t => t.value === type)?.label ?? 'Bet';
 }
 
@@ -103,22 +101,70 @@ function MarketQuickPick({ onPick }: { onPick: (v: string) => void }) {
 
 function ScoreStepper({ label, value, onChange }: { label: string; value: number | undefined; onChange: (v: number) => void }) {
   const v = value ?? 0;
+  const stepBtn: React.CSSProperties = {
+    background: 'transparent', border: '1px solid #2a2a52', borderRadius: 6,
+    color: '#a78bfa', fontSize: 14, fontWeight: 700, width: 28, height: 28, cursor: 'pointer', flexShrink: 0,
+  };
   return (
     <div>
       <label style={LABEL}>{label}</label>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <button type="button" disabled={v <= 0} onClick={() => onChange(Math.max(0, v - 1))} style={{
-          background: 'transparent', border: '1px solid #2a2a52', borderRadius: 6,
-          color: '#a78bfa', fontSize: 14, fontWeight: 700, width: 28, height: 28, cursor: v <= 0 ? 'not-allowed' : 'pointer',
-          opacity: v <= 0 ? 0.35 : 1, flexShrink: 0,
+          ...stepBtn, cursor: v <= 0 ? 'not-allowed' : 'pointer', opacity: v <= 0 ? 0.35 : 1,
         }}>−</button>
-        <span style={{ fontSize: 16, fontWeight: 700, color: '#f1f5f9', minWidth: 20, textAlign: 'center' }}>{v}</span>
-        <button type="button" onClick={() => onChange(v + 1)} style={{
-          background: 'transparent', border: '1px solid #2a2a52', borderRadius: 6,
-          color: '#a78bfa', fontSize: 14, fontWeight: 700, width: 28, height: 28, cursor: 'pointer', flexShrink: 0,
-        }}>+</button>
+        <input type="number" min="0" value={v}
+          onChange={e => onChange(Math.max(0, parseInt(e.target.value) || 0))}
+          style={{ ...INPUT, width: 44, textAlign: 'center', padding: '4px 2px', flexShrink: 0 }} />
+        <button type="button" onClick={() => onChange(v + 1)} style={stepBtn}>+</button>
       </div>
     </div>
+  );
+}
+
+// Popup number keypad — click the field to tap out a value (odds/stake), like the admin PIN pad.
+function NumberKeypadInput({ value, onChange, placeholder, style }: {
+  value: string; onChange: (v: string) => void; placeholder?: string; style?: React.CSSProperties;
+}) {
+  const [open, setOpen] = useState(false);
+  function tap(key: string) {
+    if (key === '⌫') { onChange(value.slice(0, -1)); return; }
+    if (key === '.' && value.includes('.')) return;
+    onChange(value + key);
+  }
+  return (
+    <>
+      <input readOnly value={value} placeholder={placeholder} onClick={() => setOpen(true)}
+        style={{ ...INPUT, ...style, cursor: 'pointer' }} />
+      {open && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(4px)',
+            zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+          }}
+          onClick={e => { if (e.target === e.currentTarget) setOpen(false); }}
+        >
+          <div style={{ background: '#16162e', border: '1px solid #2a2a52', borderRadius: 14, padding: '20px 18px', width: '100%', maxWidth: 260 }}>
+            <div style={{ fontSize: 28, fontWeight: 700, color: '#f1f5f9', textAlign: 'center', marginBottom: 16, minHeight: 34 }}>
+              {value || '0'}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+              {['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', '⌫'].map(k => (
+                <button key={k} type="button" onClick={() => tap(k)} style={{
+                  background: '#0a0a14', border: '1px solid #2a2a52', borderRadius: 10,
+                  color: '#f1f5f9', fontSize: 18, fontWeight: 600, padding: '12px 0', cursor: 'pointer',
+                }}>{k}</button>
+              ))}
+            </div>
+            <button type="button" onClick={() => setOpen(false)} style={{
+              marginTop: 12, width: '100%', background: '#7c3aed', border: 'none', borderRadius: 10,
+              color: '#fff', fontSize: 14, fontWeight: 700, padding: 10, cursor: 'pointer',
+            }}>
+              Done
+            </button>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -172,10 +218,27 @@ function ConfirmDialog({ title, message, confirmLabel, confirmColor = '#ef4444',
 function OutcomeFields({ sport, outcome, onChange }: {
   sport: SportType; outcome: SportOutcome; onChange: (o: SportOutcome) => void;
 }) {
-  const set = (key: keyof SportOutcome, val: string | number) => onChange({ ...outcome, [key]: val });
+  const set = (key: keyof SportOutcome, val: string | number | boolean) => onChange({ ...outcome, [key]: val });
+
+  const textToggle = (
+    <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 11, color: '#64748b', marginBottom: 8 }}>
+      <input type="checkbox" checked={!!outcome.useText} onChange={e => set('useText', e.target.checked)} />
+      Use text instead
+    </label>
+  );
+
+  if (outcome.useText) return (
+    <div style={FIELD}>
+      {textToggle}
+      <label style={LABEL}>Result</label>
+      <input value={outcome.resultText ?? ''} onChange={e => set('resultText', e.target.value)}
+        placeholder="e.g. Away Won" style={INPUT} />
+    </div>
+  );
 
   if (sport === 'tennis') return (
     <div style={FIELD}>
+      {textToggle}
       <label style={LABEL}>Sets Score</label>
       <input value={outcome.sets ?? ''} onChange={e => set('sets', e.target.value)}
         placeholder="e.g. 6-4, 7-5, 3-6, 6-2" style={INPUT} />
@@ -183,6 +246,7 @@ function OutcomeFields({ sport, outcome, onChange }: {
   );
   if (sport === 'darts') return (
     <div style={FIELD}>
+      {textToggle}
       <label style={LABEL}>Sets/Legs Score</label>
       <input value={outcome.sets ?? ''} onChange={e => set('sets', e.target.value)}
         placeholder="e.g. 3-1 (sets)" style={INPUT} />
@@ -190,6 +254,7 @@ function OutcomeFields({ sport, outcome, onChange }: {
   );
   if (sport === 'horse_racing') return (
     <div style={FIELD}>
+      {textToggle}
       <label style={LABEL}>Finish Position</label>
       <select value={outcome.finishPosition ?? ''} onChange={e => set('finishPosition', e.target.value)} style={SELECT}>
         <option value="">Select…</option>
@@ -199,6 +264,7 @@ function OutcomeFields({ sport, outcome, onChange }: {
   );
   if (sport === 'golf') return (
     <div style={FIELD}>
+      {textToggle}
       <label style={LABEL}>Score to Par</label>
       <input value={outcome.scoreToPar ?? ''} onChange={e => set('scoreToPar', e.target.value)}
         placeholder="e.g. -12 or +3" style={INPUT} />
@@ -217,15 +283,24 @@ function OutcomeFields({ sport, outcome, onChange }: {
     sport === 'rugby'      ? ['FT','AET'] :
                              ['FT','AET','Pens'];
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
-      <ScoreStepper label="Home Score" value={outcome.homeScore} onChange={v => set('homeScore', v)} />
-      <ScoreStepper label="Away Score" value={outcome.awayScore} onChange={v => set('awayScore', v)} />
-      <div>
-        <label style={LABEL}>Status</label>
-        <select value={outcome.matchStatus ?? 'FT'} onChange={e => set('matchStatus', e.target.value)} style={SELECT}>
-          {statuses.map(s => <option key={s} value={s}>{s}</option>)}
-        </select>
+    <div>
+      {textToggle}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+        <ScoreStepper label="Home Score" value={outcome.homeScore} onChange={v => set('homeScore', v)} />
+        <ScoreStepper label="Away Score" value={outcome.awayScore} onChange={v => set('awayScore', v)} />
+        <div>
+          <label style={LABEL}>Status</label>
+          <select value={outcome.matchStatus ?? 'FT'} onChange={e => set('matchStatus', e.target.value)} style={SELECT}>
+            {statuses.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </div>
       </div>
+      {outcome.matchStatus === 'Pens' && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 10 }}>
+          <ScoreStepper label="Pens (Home)" value={outcome.penaltyHomeScore} onChange={v => set('penaltyHomeScore', v)} />
+          <ScoreStepper label="Pens (Away)" value={outcome.penaltyAwayScore} onChange={v => set('penaltyAwayScore', v)} />
+        </div>
+      )}
     </div>
   );
 }
@@ -295,6 +370,7 @@ type LegForm = {
 type BetForm = {
   date: string; title: string; type: BetType;
   odds: string;          // base odds (always shown) — "Total Odds" / "Base Odds"
+  oddsAutoCalc: boolean;  // when true, odds is derived live from the product of leg odds
   boostedOdds: string;   // effective boosted odds (shown when isBoosted) — "Boosted Odds"
   isBoosted: boolean;
   stake: string; result: BetResult; returns: string; notes: string;
@@ -308,18 +384,26 @@ function lastUsedSport(): SportType {
 
 function emptyLeg(sport?: SportType, odds?: string): LegForm {
   return {
-    selection: '', market: '', matchup: '', odds: odds ?? '1.50', oddsTouched: false, boostedOdds: '',
+    selection: '', market: 'Match Result', matchup: '', odds: odds ?? '1.50', oddsTouched: false, boostedOdds: '',
     isBoosted: false, result: 'pending', sport: sport ?? lastUsedSport(),
     isBetBuilder: false, subLegs: [], outcomeDecided: false, outcome: {},
   };
+}
+
+function computeOddsFromLegs(legs: LegForm[]): string {
+  const total = legs.reduce((acc, l) => {
+    const odds = l.isBoosted && l.boostedOdds ? parseFloat(l.boostedOdds) : parseFloat(l.odds) || 1;
+    return acc * odds;
+  }, 1);
+  return total.toFixed(2);
 }
 
 function emptyForm(): BetForm {
   const odds = '2.00';
   return {
     date: new Date().toISOString().slice(0, 16),
-    title: autoTitle('acca', 1), type: 'acca',
-    odds, boostedOdds: '', isBoosted: false,
+    title: autoTitle('acca'), type: 'acca',
+    odds, oddsAutoCalc: false, boostedOdds: '', isBoosted: false,
     stake: '10', result: 'pending', returns: '', notes: '',
     legs: [emptyLeg(undefined, odds)],
   };
@@ -422,16 +506,25 @@ export default function AdminPage() {
     legs[i] = { ...legs[i], [field]: val };
     setForm(f => ({ ...f, legs }));
   }
+  // For leg fields that feed into the total odds (odds/boostedOdds/isBoosted) — recalculates
+  // the main Total Odds field live when Auto-calc is on.
+  function updateLegOdds(i: number, patch: Partial<LegForm>) {
+    setForm(f => {
+      const legs = [...f.legs];
+      legs[i] = { ...legs[i], ...patch };
+      return { ...f, legs, odds: f.oddsAutoCalc ? computeOddsFromLegs(legs) : f.odds };
+    });
+  }
   function addLeg() {
     setForm(f => {
       const legs = [...f.legs, emptyLeg(f.legs[f.legs.length - 1]?.sport, f.odds)];
-      return { ...f, legs, title: titleAuto ? autoTitle(f.type, legs.length) : f.title };
+      return { ...f, legs, odds: f.oddsAutoCalc ? computeOddsFromLegs(legs) : f.odds };
     });
   }
   function removeLeg(i: number) {
     setForm(f => {
       const legs = f.legs.filter((_, j) => j !== i);
-      return { ...f, legs, title: titleAuto ? autoTitle(f.type, legs.length) : f.title };
+      return { ...f, legs, odds: f.oddsAutoCalc ? computeOddsFromLegs(legs) : f.odds };
     });
   }
 
@@ -495,6 +588,7 @@ export default function AdminPage() {
       type:        bet.type,
       // If boosted: base goes into odds, boosted goes into boostedOdds
       odds:        bet.baseTotalOdds ? String(bet.baseTotalOdds) : String(bet.totalOdds),
+      oddsAutoCalc: false,
       boostedOdds: bet.baseTotalOdds ? String(bet.totalOdds) : '',
       isBoosted:   bet.isBoosted ?? false,
       stake:       String(bet.stake),
@@ -685,9 +779,26 @@ export default function AdminPage() {
                 </div>
                 <div>
                   <label style={LABEL}>Time</label>
-                  <input type="time" value={form.date.split('T')[1] ?? '00:00'}
-                    onChange={e => setForm(f => ({ ...f, date: `${f.date.split('T')[0]}T${e.target.value}` }))}
-                    style={INPUT} required />
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <select value={(form.date.split('T')[1] ?? '00:00').split(':')[0]}
+                      onChange={e => {
+                        const min = (form.date.split('T')[1] ?? '00:00').split(':')[1];
+                        setForm(f => ({ ...f, date: `${f.date.split('T')[0]}T${e.target.value}:${min}` }));
+                      }} style={SELECT}>
+                      {Array.from({ length: 24 }, (_, h) => String(h).padStart(2, '0')).map(h => (
+                        <option key={h} value={h}>{h}</option>
+                      ))}
+                    </select>
+                    <select value={(form.date.split('T')[1] ?? '00:00').split(':')[1]}
+                      onChange={e => {
+                        const hr = (form.date.split('T')[1] ?? '00:00').split(':')[0];
+                        setForm(f => ({ ...f, date: `${f.date.split('T')[0]}T${hr}:${e.target.value}` }));
+                      }} style={SELECT}>
+                      {['00', '05', '10', '15', '20', '25', '30', '35', '40', '45', '50', '55'].map(m => (
+                        <option key={m} value={m}>{m}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               </div>
 
@@ -696,7 +807,7 @@ export default function AdminPage() {
                   <label style={LABEL}>Type</label>
                   <select value={form.type} onChange={e => {
                     const type = e.target.value as BetType;
-                    setForm(f => ({ ...f, type, title: titleAuto ? autoTitle(type, f.legs.length) : f.title }));
+                    setForm(f => ({ ...f, type, title: titleAuto ? autoTitle(type) : f.title }));
                   }} style={SELECT}>
                     {BET_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                   </select>
@@ -712,19 +823,34 @@ export default function AdminPage() {
                 <div>
                   {/* Label: "Total Odds" normally; "Base Odds" when boosted */}
                   <label style={LABEL}>{form.isBoosted ? 'Base Odds' : 'Total Odds'}</label>
-                  <input type="number" step="0.01" min="1" inputMode="decimal" value={form.odds}
-                    onChange={e => {
-                      const odds = e.target.value;
-                      setForm(f => ({
-                        ...f, odds,
-                        legs: f.legs.map(l => l.oddsTouched ? l : { ...l, odds }),
-                      }));
-                    }} style={INPUT} required />
+                  <div style={{ position: 'relative' }}>
+                    {form.oddsAutoCalc ? (
+                      <input readOnly value={form.odds} style={{ ...INPUT, paddingRight: 88, opacity: 0.85 }} />
+                    ) : (
+                      <NumberKeypadInput value={form.odds} onChange={odds => setForm(f => ({
+                        ...f, odds, legs: f.legs.map(l => l.oddsTouched ? l : { ...l, odds }),
+                      }))} style={{ paddingRight: 88 }} />
+                    )}
+                    <label style={{
+                      position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
+                      display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: '#a78bfa',
+                      cursor: 'pointer', userSelect: 'none',
+                    }}>
+                      <input type="checkbox" checked={form.oddsAutoCalc} onChange={e => {
+                        const on = e.target.checked;
+                        setForm(f => ({ ...f, oddsAutoCalc: on, odds: on ? computeOddsFromLegs(f.legs) : f.odds }));
+                      }} />
+                      Auto-calc
+                    </label>
+                  </div>
+                  <PresetChips values={ODDS_PRESETS} prefix="@" onPick={v => setForm(f => ({
+                    ...f, odds: v, legs: f.legs.map(l => l.oddsTouched ? l : { ...l, odds: v }),
+                  }))} />
                 </div>
                 <div>
                   <label style={LABEL}>Stake (£)</label>
-                  <input type="number" step="0.01" min="0" inputMode="decimal" value={form.stake}
-                    onChange={e => setForm(f => ({ ...f, stake: e.target.value }))} style={INPUT} required />
+                  <NumberKeypadInput value={form.stake} onChange={v => setForm(f => ({ ...f, stake: v }))} />
+                  <PresetChips values={STAKE_PRESETS} prefix="£" onPick={v => setForm(f => ({ ...f, stake: v }))} />
                 </div>
                 <div>
                   <label style={LABEL}>Result</label>
@@ -737,30 +863,6 @@ export default function AdminPage() {
                     <option value="void">Void</option>
                   </select>
                 </div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 12 }}>
-                <div>
-                  <PresetChips values={ODDS_PRESETS} prefix="@" onPick={v => setForm(f => ({
-                    ...f, odds: v, legs: f.legs.map(l => l.oddsTouched ? l : { ...l, odds: v }),
-                  }))} />
-                  <button type="button" onClick={() => {
-                    const total = form.legs.reduce((acc, l) => {
-                      const odds = l.isBoosted && l.boostedOdds ? parseFloat(l.boostedOdds) : parseFloat(l.odds || form.odds) || 1;
-                      return acc * odds;
-                    }, 1);
-                    setForm(f => ({ ...f, odds: total.toFixed(2) }));
-                  }} style={{
-                    marginTop: 6, background: 'transparent', border: '1px solid #2a2a52', borderRadius: 6,
-                    color: '#a78bfa', fontSize: 11, padding: '3px 8px', cursor: 'pointer',
-                  }}>
-                    🧮 Calc from legs
-                  </button>
-                </div>
-                <div>
-                  <PresetChips values={STAKE_PRESETS} prefix="£" onPick={v => setForm(f => ({ ...f, stake: v }))} />
-                </div>
-                <div />
               </div>
 
               {form.result === 'won' && (
@@ -781,9 +883,8 @@ export default function AdminPage() {
                 {form.isBoosted && (
                   <div style={{ flex: 1, minWidth: 140 }}>
                     <label style={LABEL}>Boosted Odds</label>
-                    <input type="number" step="0.01" min="1" inputMode="decimal" value={form.boostedOdds}
-                      onChange={e => setForm(f => ({ ...f, boostedOdds: e.target.value }))}
-                      placeholder="e.g. 5.50" style={INPUT} />
+                    <NumberKeypadInput value={form.boostedOdds} onChange={v => setForm(f => ({ ...f, boostedOdds: v }))}
+                      placeholder="e.g. 5.50" />
                   </div>
                 )}
               </div>
@@ -855,18 +956,9 @@ export default function AdminPage() {
                     <div>
                       {/* Label changes to "Base Odds" when boosted. Optional — mirrors main odds until edited. */}
                       <label style={LABEL}>{leg.isBoosted ? 'Base Odds' : 'Odds'}</label>
-                      <input type="number" step="0.01" min="1" inputMode="decimal" value={leg.odds}
-                        onChange={e => {
-                          const legs = [...form.legs];
-                          legs[i] = { ...legs[i], odds: e.target.value, oddsTouched: true };
-                          setForm(f => ({ ...f, legs }));
-                        }}
-                        placeholder={form.odds} style={INPUT} />
-                      <PresetChips values={ODDS_PRESETS} prefix="@" onPick={v => {
-                        const legs = [...form.legs];
-                        legs[i] = { ...legs[i], odds: v, oddsTouched: true };
-                        setForm(f => ({ ...f, legs }));
-                      }} />
+                      <NumberKeypadInput value={leg.odds} placeholder={form.odds}
+                        onChange={v => updateLegOdds(i, { odds: v, oddsTouched: true })} />
+                      <PresetChips values={ODDS_PRESETS} prefix="@" onPick={v => updateLegOdds(i, { odds: v, oddsTouched: true })} />
                     </div>
                     <div>
                       <label style={LABEL}>Result</label>
@@ -884,15 +976,14 @@ export default function AdminPage() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
                     <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 12, color: '#64748b' }}>
                       <input type="checkbox" checked={leg.isBoosted}
-                        onChange={e => updateLeg(i, 'isBoosted', e.target.checked)} />
+                        onChange={e => updateLegOdds(i, { isBoosted: e.target.checked })} />
                       🚀 Boosted
                     </label>
                     {leg.isBoosted && (
                       <div style={{ flex: 1, minWidth: 120 }}>
                         <label style={LABEL}>Boosted Odds</label>
-                        <input type="number" step="0.01" min="1" inputMode="decimal" value={leg.boostedOdds}
-                          onChange={e => updateLeg(i, 'boostedOdds', e.target.value)}
-                          placeholder="e.g. 1.25" style={INPUT} />
+                        <NumberKeypadInput value={leg.boostedOdds} placeholder="e.g. 1.25"
+                          onChange={v => updateLegOdds(i, { boostedOdds: v })} />
                       </div>
                     )}
                   </div>

@@ -66,7 +66,10 @@ function ScoreRow({ leg }: { leg: BetLeg }) {
   let scoreText = '';
 
   if (outcome) {
-    if (sport === 'tennis' || sport === 'darts') {
+    if (outcome.useText && outcome.resultText) {
+      label = 'RESULT';
+      scoreText = outcome.resultText;
+    } else if (sport === 'tennis' || sport === 'darts') {
       label = 'SETS';
       scoreText = outcome.sets ?? '';
     } else if (sport === 'horse_racing') {
@@ -78,6 +81,9 @@ function ScoreRow({ leg }: { leg: BetLeg }) {
     } else if (outcome.homeScore != null && outcome.awayScore != null) {
       label = outcome.matchStatus ?? 'FT';
       scoreText = `${outcome.homeScore} - ${outcome.awayScore}`;
+      if (outcome.matchStatus === 'Pens' && outcome.penaltyHomeScore != null && outcome.penaltyAwayScore != null) {
+        scoreText += ` (${outcome.penaltyHomeScore}-${outcome.penaltyAwayScore} pens)`;
+      }
     } else if (outcome.resultText) {
       label = 'RESULT';
       scoreText = outcome.resultText;

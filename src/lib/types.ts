@@ -50,14 +50,18 @@ export interface SportOutcome {
   homeScore?: number;
   awayScore?: number;
   matchStatus?: string; // FT, AET, Pens, OT, 2OT
-  // Tennis
+  // Penalty shootout (when matchStatus === 'Pens')
+  penaltyHomeScore?: number;
+  penaltyAwayScore?: number;
+  // Tennis / Darts
   sets?: string; // e.g. "6-4, 7-5, 3-6, 6-2"
   // Horse racing
   finishPosition?: string; // "1st", "2nd" etc.
   // Golf
   scoreToPar?: string; // "-12", "+3" etc.
-  // Free-text for cricket / other
+  // Free-text for cricket / other, or when useText is toggled on
   resultText?: string;
+  useText?: boolean;
 }
 
 export interface BetLeg {
