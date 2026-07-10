@@ -1,7 +1,8 @@
 'use client';
 
 import { useRef, useState, useEffect, useCallback } from 'react';
-import { Bet, BetStats, FilterType } from '@/lib/types';
+import { Bet, BetStats, Currency, FilterType } from '@/lib/types';
+import { formatMoney } from '@/lib/currency';
 
 const FILTERS: { key: FilterType; label: string }[] = [
   { key: 'today',        label: 'Today' },
@@ -54,9 +55,10 @@ interface Props {
   active: FilterType;
   onChange: (f: FilterType) => void;
   stats: BetStats;
+  currency: Currency;
 }
 
-export default function FilterBar({ active, onChange, stats }: Props) {
+export default function FilterBar({ active, onChange, stats, currency }: Props) {
   const scrollRef  = useRef<HTMLDivElement>(null);
   const dragging   = useRef(false);
   const dragStartX = useRef(0);
@@ -140,7 +142,7 @@ export default function FilterBar({ active, onChange, stats }: Props) {
     { label: 'WON',    value: String(stats.won),                                    color: '#10b981' },
     { label: 'LOST',   value: String(stats.lost),                                   color: '#ef4444' },
     { label: 'WIN %',  value: `${stats.winRate.toFixed(0)}%`,                       color: stats.winRate >= 50 ? '#10b981' : '#ef4444' },
-    { label: 'P&L',    value: `${pnlPos ? '+' : ''}£${stats.pnl.toFixed(2)}`,      color: pnlPos   ? '#10b981' : '#ef4444' },
+    { label: 'P&L',    value: `${pnlPos ? '+' : ''}${formatMoney(stats.pnl, currency)}`, color: pnlPos ? '#10b981' : '#ef4444' },
     { label: 'UNITS',  value: `${unitsPos ? '+' : ''}${stats.units.toFixed(2)}u`,   color: unitsPos ? '#10b981' : '#ef4444' },
     { label: 'ROI',    value: `${pnlPos ? '+' : ''}${stats.roi.toFixed(1)}%`,       color: pnlPos   ? '#10b981' : '#ef4444' },
   ];

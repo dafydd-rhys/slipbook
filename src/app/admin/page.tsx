@@ -60,6 +60,7 @@ const SPORTS: { value: SportType; emoji: string; label: string }[] = [
   { value: 'boxing',       emoji: '🥊', label: 'Boxing' },
   { value: 'mma',          emoji: '🥋', label: 'MMA' },
   { value: 'darts',        emoji: '🎯', label: 'Darts' },
+  { value: 'baseball',     emoji: '⚾', label: 'Baseball' },
   { value: 'other',        emoji: '❔', label: 'Other' },
 ];
 
@@ -388,6 +389,7 @@ type BetForm = {
   boostedOddsAutoCalc: boolean; // when true, boostedOdds is derived live from legs' boosted-aware odds
   isBoosted: boolean;
   stake: string; result: BetResult; returns: string; notes: string;
+  cashedOut: boolean; // when true (and result is 'won'), `returns` is a manually entered cash-out amount
   legs: LegForm[];
 };
 
@@ -423,13 +425,20 @@ function computeBoostedOddsFromLegs(legs: LegForm[]): string {
   return total.toFixed(2);
 }
 
+// Auto-calculated returns for a "Won" bet — stake × effective total odds (boosted if applicable).
+function computeWinReturns(form: BetForm): number {
+  const effectiveOdds = form.isBoosted && form.boostedOdds
+    ? parseFloat(form.boostedOdds) : parseFloat(form.odds) || 1;
+  return (parseFloat(form.stake) || 0) * effectiveOdds;
+}
+
 function emptyForm(): BetForm {
   const odds = '2.00';
   return {
     date: new Date().toISOString().slice(0, 16),
     title: autoTitle('acca'), type: 'acca',
     odds, oddsAutoCalc: false, boostedOdds: '', boostedOddsAutoCalc: false, isBoosted: false,
-    stake: '10', result: 'pending', returns: '', notes: '',
+    stake: '10', result: 'pending', returns: '', notes: '', cashedOut: false,
     legs: [emptyLeg(undefined, odds)],
   };
 }
@@ -450,8 +459,10 @@ function buildBet(form: BetForm, id: string = 'preview'): Bet {
     isBoosted: form.isBoosted,
     stake: parseFloat(form.stake) || 0,
     result: form.result,
-    returns: form.result === 'won' && form.returns ? parseFloat(form.returns)
-           : form.result === 'lost' ? 0 : undefined,
+    returns: form.result === 'won'
+      ? (form.cashedOut ? parseFloat(form.returns) || 0 : computeWinReturns(form))
+      : form.result === 'lost' ? 0 : undefined,
+    cashedOut: form.result === 'won' && form.cashedOut ? true : undefined,
     notes: form.notes || undefined,
     legs: form.legs.map((l, i): BetLeg => {
       const legOdds = l.odds || form.odds;
@@ -630,6 +641,7 @@ export default function AdminPage() {
       stake:       String(bet.stake),
       result:      bet.result,
       returns:     bet.returns ? String(bet.returns) : '',
+      cashedOut:   bet.cashedOut ?? false,
       notes:       bet.notes ?? '',
       legs: bet.legs.map(l => ({
         selection:     l.selection,
@@ -901,8 +913,19 @@ export default function AdminPage() {
               {form.result === 'won' && (
                 <div style={FIELD}>
                   <label style={LABEL}>Returns (£)</label>
-                  <input type="number" step="0.01" min="0" inputMode="decimal" value={form.returns}
-                    onChange={e => setForm(f => ({ ...f, returns: e.target.value }))} style={INPUT} />
+                  {form.cashedOut ? (
+                    <NumberKeypadInput value={form.returns} placeholder="e.g. 59.86"
+                      onChange={v => setForm(f => ({ ...f, returns: v }))} />
+                  ) : (
+                    <input readOnly value={computeWinReturns(form).toFixed(2)} style={{ ...INPUT, opacity: 0.85 }} />
+                  )}
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, cursor: 'pointer', fontSize: 12, color: '#64748b' }}>
+                    <input type="checkbox" checked={form.cashedOut} onChange={e => {
+                      const cashedOut = e.target.checked;
+                      setForm(f => ({ ...f, cashedOut, returns: cashedOut ? f.returns : '' }));
+                    }} />
+                    💰 Cashed out early
+                  </label>
                 </div>
               )}
 

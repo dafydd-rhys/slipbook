@@ -1,5 +1,6 @@
 export type BetResult = 'won' | 'lost' | 'void' | 'pending';
 export type OddsFormat = 'decimal' | 'fraction' | 'us';
+export type Currency = 'GBP' | 'EUR' | 'USD';
 
 export type BetType =
   | 'single'
@@ -26,6 +27,7 @@ export type SportType =
   | 'boxing'
   | 'mma'
   | 'darts'
+  | 'baseball'
   | 'other';
 
 export type FilterType =
@@ -96,6 +98,7 @@ export interface Bet {
   stake: number;
   result: BetResult;
   returns?: number;
+  cashedOut?: boolean;
   notes?: string;
 }
 

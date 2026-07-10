@@ -3,10 +3,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import BetCard from '@/components/BetCard';
 import FilterBar, { applyFilter, computeStats } from '@/components/FilterBar';
-import { Bet, FilterType, OddsFormat } from '@/lib/types';
+import { Bet, FilterType, OddsFormat, Currency } from '@/lib/types';
+import { CURRENCIES } from '@/lib/currency';
 
 const PAGE_SIZE = 10;
 const CONTENT_WIDTH = 720;
+const FMT_KEY = 'strz_odds_format';
+const CURRENCY_KEY = 'strz_currency';
+
+const SELECT_STYLE: React.CSSProperties = {
+  background: '#12122a', border: '1px solid #2a2a52', borderRadius: 8,
+  color: '#f1f5f9', fontSize: 12, fontWeight: 700, padding: '5px 8px',
+  outline: 'none', cursor: 'pointer',
+};
 
 function formatDayLabel(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString('en-GB', {
@@ -75,6 +84,7 @@ export default function Home() {
   const [allBets, setAllBets] = useState<Bet[]>([]);
   const [filter, setFilter] = useState<FilterType>('all');
   const [fmt, setFmt] = useState<OddsFormat>('decimal');
+  const [currency, setCurrency] = useState<Currency>('GBP');
   const [displayCount, setDisplayCount] = useState(PAGE_SIZE);
   const [loading, setLoading] = useState(true);
   const [showInfo, setShowInfo] = useState(false);
@@ -86,6 +96,23 @@ export default function Home() {
       .then((bets: Bet[]) => { setAllBets(bets); setLoading(false); })
       .catch(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    const storedFmt = localStorage.getItem(FMT_KEY) as OddsFormat | null;
+    if (storedFmt) setFmt(storedFmt);
+    const storedCurrency = localStorage.getItem(CURRENCY_KEY) as Currency | null;
+    if (storedCurrency) setCurrency(storedCurrency);
+  }, []);
+
+  function handleFmtChange(f: OddsFormat) {
+    setFmt(f);
+    localStorage.setItem(FMT_KEY, f);
+  }
+
+  function handleCurrencyChange(c: Currency) {
+    setCurrency(c);
+    localStorage.setItem(CURRENCY_KEY, c);
+  }
 
   const handleFilterChange = useCallback((f: FilterType) => {
     setFilter(f);
@@ -176,35 +203,20 @@ export default function Home() {
             <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.04em' }}>Guide</span>
           </button>
 
-          {/* Odds toggle */}
-          <div style={{ display: 'flex', gap: 2, background: '#12122a', borderRadius: 9, padding: 3 }}>
-            {FORMATS.map(f => (
-              <button
-                key={f}
-                onClick={() => setFmt(f)}
-                style={{
-                  background: fmt === f ? '#7c3aed' : 'transparent',
-                  border: 'none',
-                  borderRadius: 6,
-                  color: fmt === f ? '#fff' : '#475569',
-                  fontSize: 11,
-                  fontWeight: 700,
-                  letterSpacing: '0.02em',
-                  padding: '4px 12px',
-                  cursor: 'pointer',
-                  transition: 'all 0.15s',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {FORMAT_LABELS[f]}
-              </button>
-            ))}
+          {/* Odds format + currency dropdowns */}
+          <div style={{ display: 'flex', gap: 8 }}>
+            <select value={fmt} onChange={e => handleFmtChange(e.target.value as OddsFormat)} style={SELECT_STYLE}>
+              {FORMATS.map(f => <option key={f} value={f}>{FORMAT_LABELS[f]}</option>)}
+            </select>
+            <select value={currency} onChange={e => handleCurrencyChange(e.target.value as Currency)} style={SELECT_STYLE}>
+              {CURRENCIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+            </select>
           </div>
         </div>
       </div>
 
       {/* ── Filters + Stats ── */}
-      <FilterBar active={filter} onChange={handleFilterChange} stats={stats} />
+      <FilterBar active={filter} onChange={handleFilterChange} stats={stats} currency={currency} />
 
       {/* ── Bet list ── */}
       <div style={{ maxWidth: CONTENT_WIDTH, margin: '0 auto', padding: '20px 20px 56px' }}>
@@ -231,7 +243,7 @@ export default function Home() {
             }}>
               {label}
             </div>
-            {bets.map(bet => <BetCard key={bet.id} bet={bet} fmt={fmt} />)}
+            {bets.map(bet => <BetCard key={bet.id} bet={bet} fmt={fmt} currency={currency} />)}
           </div>
         ))}
 

@@ -1,13 +1,14 @@
 'use client';
 
-import { Bet, BetLeg, BetResult, SportType, OddsFormat } from '@/lib/types';
+import { Bet, BetLeg, BetResult, SportType, OddsFormat, Currency } from '@/lib/types';
 import { formatOdds } from '@/lib/odds';
+import { formatMoney } from '@/lib/currency';
 
 function sportEmoji(sport?: SportType): string {
   const map: Record<SportType, string> = {
     football: '⚽', tennis: '🎾', basketball: '🏀', esports: '🎮',
     cricket: '🏏', horse_racing: '🏇', golf: '⛳', rugby: '🏉',
-    boxing: '🥊', mma: '🥋', darts: '🎯', other: '❔',
+    boxing: '🥊', mma: '🥋', darts: '🎯', baseball: '⚾', other: '❔',
   };
   return sport ? map[sport] : '❔';
 }
@@ -179,9 +180,10 @@ function LegRow({ leg, fmt }: { leg: BetLeg; fmt: OddsFormat }) {
 interface Props {
   bet: Bet;
   fmt: OddsFormat;
+  currency?: Currency;
 }
 
-export default function BetCard({ bet, fmt }: Props) {
+export default function BetCard({ bet, fmt, currency = 'GBP' }: Props) {
   const pnl = (bet.returns ?? 0) - bet.stake;
   const isPos = pnl > 0;
 
@@ -236,18 +238,20 @@ export default function BetCard({ bet, fmt }: Props) {
         padding: '7px 14px', background: '#0f0f22', borderTop: '1px solid #1a1a38',
       }}>
         <span style={{ fontSize: 11, color: '#475569' }}>
-          Stake <strong style={{ color: '#64748b' }}>£{bet.stake.toFixed(2)}</strong>
+          Stake <strong style={{ color: '#64748b' }}>{formatMoney(bet.stake, currency)}</strong>
         </span>
         {bet.result !== 'pending' ? (
           <span style={{ fontSize: 11, fontWeight: 700, color: isPos ? '#10b981' : '#ef4444' }}>
-            {isPos ? '+' : ''}£{pnl.toFixed(2)}
+            {isPos ? '+' : ''}{formatMoney(pnl, currency)}
             {bet.returns ? (
-              <span style={{ color: '#475569', fontWeight: 400 }}> (£{bet.returns.toFixed(2)} ret.)</span>
+              <span style={{ color: '#475569', fontWeight: 400 }}>
+                {' '}({formatMoney(bet.returns, currency)} ret.{bet.cashedOut ? ' — cashed out' : ''})
+              </span>
             ) : null}
           </span>
         ) : (
           <span style={{ fontSize: 11, color: '#f59e0b', fontWeight: 600 }}>
-            Pot. £{(bet.stake * bet.totalOdds).toFixed(2)}
+            Pot. {formatMoney(bet.stake * bet.totalOdds, currency)}
           </span>
         )}
       </div>
