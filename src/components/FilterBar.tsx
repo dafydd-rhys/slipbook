@@ -1,64 +1,58 @@
 'use client';
 
 import { useRef, useState, useEffect, useCallback } from 'react';
-import { Bet, BetStats, Currency, FilterType } from '@/lib/types';
-import { formatMoney } from '@/lib/currency';
+import { Bet, BetStats, FilterType, OddsFormat } from '@/lib/types';
+import { formatOdds } from '@/lib/odds';
+import { toUnits } from '@/lib/units';
 
 const FILTERS: { key: FilterType; label: string }[] = [
-  { key: 'today',        label: 'Today' },
-  { key: 'week',         label: 'This Week' },
-  { key: 'month',        label: 'This Month' },
-  { key: 'year',         label: 'This Year' },
-  { key: 'all',          label: 'All Time' },
-  { key: 'biggest_win',  label: '💰 Biggest Win' },
-  { key: 'biggest_lose', label: '💸 Biggest Lose' },
-  { key: 'best_odds_win',label: '🎯 Best Odds' },
+  { key: 'last7',  label: 'Last 7 Days' },
+  { key: 'last30', label: 'Last 30 Days' },
+  { key: 'last90', label: 'Last 90 Days' },
+  { key: 'year',   label: '1 Year' },
+  { key: 'all',    label: 'All Time' },
 ];
 
 export function applyFilter(bets: Bet[], filter: FilterType): Bet[] {
   const now = new Date();
-  const sod = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const sow = new Date(sod); sow.setDate(sod.getDate() - ((sod.getDay() + 6) % 7));
-  const som = new Date(now.getFullYear(), now.getMonth(), 1);
-  const soy = new Date(now.getFullYear(), 0, 1);
+  const last7  = new Date(now); last7.setDate(now.getDate() - 7);
+  const last30 = new Date(now); last30.setDate(now.getDate() - 30);
+  const last90 = new Date(now); last90.setDate(now.getDate() - 90);
+  const lastYear = new Date(now); lastYear.setDate(now.getDate() - 365);
 
   let out = [...bets];
   switch (filter) {
-    case 'today':        out = out.filter(b => new Date(b.date) >= sod); out.sort((a,b) => +new Date(b.date) - +new Date(a.date)); break;
-    case 'week':         out = out.filter(b => new Date(b.date) >= sow); out.sort((a,b) => +new Date(b.date) - +new Date(a.date)); break;
-    case 'month':        out = out.filter(b => new Date(b.date) >= som); out.sort((a,b) => +new Date(b.date) - +new Date(a.date)); break;
-    case 'year':         out = out.filter(b => new Date(b.date) >= soy); out.sort((a,b) => +new Date(b.date) - +new Date(a.date)); break;
-    case 'all':          out.sort((a,b) => +new Date(b.date) - +new Date(a.date)); break;
-    case 'biggest_win':  out = out.filter(b => b.result === 'won' && b.returns != null); out.sort((a,b) => (b.returns ?? 0) - (a.returns ?? 0)); break;
-    case 'biggest_lose': out = out.filter(b => b.result === 'lost'); out.sort((a,b) => b.stake - a.stake); break;
-    case 'best_odds_win':out = out.filter(b => b.result === 'won'); out.sort((a,b) => b.totalOdds - a.totalOdds); break;
+    case 'last7':  out = out.filter(b => new Date(b.date) >= last7); break;
+    case 'last30': out = out.filter(b => new Date(b.date) >= last30); break;
+    case 'last90': out = out.filter(b => new Date(b.date) >= last90); break;
+    case 'year':   out = out.filter(b => new Date(b.date) >= lastYear); break;
+    case 'all':    break;
   }
+  out.sort((a, b) => +new Date(b.date) - +new Date(a.date));
   return out;
 }
 
 export function computeStats(bets: Bet[]): BetStats {
   const settled = bets.filter(b => b.result !== 'pending');
-  const won      = settled.filter(b => b.result === 'won').length;
-  const lost     = settled.filter(b => b.result === 'lost').length;
   const pending  = bets.filter(b => b.result === 'pending').length;
   const totalStaked  = settled.reduce((s, b) => s + b.stake, 0);
   const totalReturns = settled.reduce((s, b) => s + (b.returns ?? 0), 0);
   const pnl      = totalReturns - totalStaked;
   const roi      = totalStaked > 0 ? (pnl / totalStaked) * 100 : 0;
-  const winRate  = settled.length > 0 ? (won / settled.length) * 100 : 0;
-  const avgStake = settled.length > 0 ? totalStaked / settled.length : 1;
-  const units    = avgStake > 0 ? pnl / avgStake : 0;
-  return { totalBets: bets.length, won, lost, pending, totalStaked, totalReturns, pnl, roi, winRate, units };
+  const units    = toUnits(pnl);
+  const stakedUnits = toUnits(totalStaked);
+  const avgOdds  = bets.length > 0 ? bets.reduce((s, b) => s + b.totalOdds, 0) / bets.length : 0;
+  return { totalBets: bets.length, pending, totalStaked, totalReturns, pnl, roi, units, stakedUnits, avgOdds };
 }
 
 interface Props {
   active: FilterType;
   onChange: (f: FilterType) => void;
   stats: BetStats;
-  currency: Currency;
+  fmt: OddsFormat;
 }
 
-export default function FilterBar({ active, onChange, stats, currency }: Props) {
+export default function FilterBar({ active, onChange, stats, fmt }: Props) {
   const scrollRef  = useRef<HTMLDivElement>(null);
   const dragging   = useRef(false);
   const dragStartX = useRef(0);
@@ -138,20 +132,18 @@ export default function FilterBar({ active, onChange, stats, currency }: Props) 
   );
 
   const statItems = [
-    { label: 'BETS',   value: String(stats.totalBets),                              color: '#94a3b8' },
-    { label: 'WON',    value: String(stats.won),                                    color: '#10b981' },
-    { label: 'LOST',   value: String(stats.lost),                                   color: '#ef4444' },
-    { label: 'WIN %',  value: `${stats.winRate.toFixed(0)}%`,                       color: stats.winRate >= 50 ? '#10b981' : '#ef4444' },
-    { label: 'P&L',    value: `${pnlPos ? '+' : ''}${formatMoney(stats.pnl, currency)}`, color: pnlPos ? '#10b981' : '#ef4444' },
-    { label: 'UNITS',  value: `${unitsPos ? '+' : ''}${stats.units.toFixed(2)}u`,   color: unitsPos ? '#10b981' : '#ef4444' },
-    { label: 'ROI',    value: `${pnlPos ? '+' : ''}${stats.roi.toFixed(1)}%`,       color: pnlPos   ? '#10b981' : '#ef4444' },
+    { label: 'PICKS',          value: String(stats.totalBets),                           color: '#94a3b8' },
+    { label: 'SETTLED STAKES', value: `${stats.stakedUnits.toFixed(2)}u`,                 color: '#94a3b8' },
+    { label: 'NET UNITS',      value: `${unitsPos ? '+' : ''}${stats.units.toFixed(2)}u`, color: unitsPos ? '#10b981' : '#ef4444' },
+    { label: 'ROI',            value: `${pnlPos ? '+' : ''}${stats.roi.toFixed(1)}%`,     color: pnlPos ? '#10b981' : '#ef4444' },
+    { label: 'AVG ODDS',       value: `@ ${formatOdds(stats.avgOdds, fmt)}`,              color: '#a78bfa' },
   ];
 
   return (
     <div style={{ maxWidth: 720, margin: '0 auto', padding: '0 20px' }}>
 
       {/* ── Filter pills ── */}
-      <div style={{ paddingTop: 16, paddingBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+      <div style={{ paddingTop: 8, paddingBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
         {arrow('left', canL)}
         <div
           ref={scrollRef}

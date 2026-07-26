@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import BetCard from '@/components/BetCard';
 import { Bet, BetLeg, BetResult, BetSubLeg, BetType, SportOutcome, SportType } from '@/lib/types';
+import { groupByDay } from '@/lib/dates';
 
 const ADMIN_KEY = '131275';
 const CONTENT_WIDTH = 720;
@@ -1117,45 +1118,56 @@ export default function AdminPage() {
             {bets.length === 0 && (
               <p style={{ textAlign: 'center', color: '#334155', padding: '40px 0', fontSize: 14 }}>No bets yet. Add one!</p>
             )}
-            {bets.map(bet => (
-              <div key={bet.id} style={{
-                background: '#16162e', border: '1px solid #1a1a38', borderRadius: 12,
-                padding: '11px 0', marginBottom: 10, display: 'flex', alignItems: 'center',
-              }}>
-                {/* Info */}
-                <div style={{ flex: 1, padding: '0 14px' }}>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: '#f1f5f9' }}>{bet.title}</span>
-                  <span style={{ fontSize: 11, color: '#334155', display: 'block', marginTop: 2 }}>
-                    {new Date(bet.date).toLocaleDateString('en-GB')} · {bet.legs.length} leg{bet.legs.length !== 1 ? 's' : ''} · @{bet.totalOdds} · £{bet.stake}
-                  </span>
+            {groupByDay([...bets].sort((a, b) => +new Date(b.date) - +new Date(a.date))).map(({ label, bets: dayBets }, gi) => (
+              <div key={label} style={{ marginTop: gi > 0 ? 24 : 0 }}>
+                <div style={{
+                  fontSize: 10, fontWeight: 700, color: '#334155',
+                  letterSpacing: '0.08em', textTransform: 'uppercase',
+                  paddingBottom: 10, borderBottom: '1px solid #12122a', marginBottom: 12,
+                }}>
+                  {label}
                 </div>
-
-                {/* Result */}
-                <div style={{ padding: '0 14px', flexShrink: 0 }}>
-                  <span style={{
-                    fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 5,
-                    background: `${RESULT_COLORS[bet.result]}15`,
-                    color: RESULT_COLORS[bet.result],
-                    border: `1px solid ${RESULT_COLORS[bet.result]}30`,
+                {dayBets.map(bet => (
+                  <div key={bet.id} style={{
+                    background: '#16162e', border: '1px solid #1a1a38', borderRadius: 12,
+                    padding: '11px 0', marginBottom: 10, display: 'flex', alignItems: 'center',
                   }}>
-                    {bet.result.toUpperCase()}
-                  </span>
-                </div>
+                    {/* Info */}
+                    <div style={{ flex: 1, padding: '0 14px' }}>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: '#f1f5f9' }}>{bet.title}</span>
+                      <span style={{ fontSize: 11, color: '#334155', display: 'block', marginTop: 2 }}>
+                        {new Date(bet.date).toLocaleDateString('en-GB')} · {bet.legs.length} leg{bet.legs.length !== 1 ? 's' : ''} · @{bet.totalOdds} · £{bet.stake}
+                      </span>
+                    </div>
 
-                {/* Divider */}
-                <div style={{ width: 1, alignSelf: 'stretch', background: '#1e1e3e', flexShrink: 0 }} />
+                    {/* Result */}
+                    <div style={{ padding: '0 14px', flexShrink: 0 }}>
+                      <span style={{
+                        fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 5,
+                        background: `${RESULT_COLORS[bet.result]}15`,
+                        color: RESULT_COLORS[bet.result],
+                        border: `1px solid ${RESULT_COLORS[bet.result]}30`,
+                      }}>
+                        {bet.result.toUpperCase()}
+                      </span>
+                    </div>
 
-                {/* Actions */}
-                <div style={{ display: 'flex', gap: 6, padding: '0 14px', flexShrink: 0 }}>
-                  <button onClick={() => handleEdit(bet)} style={{
-                    background: 'transparent', border: '1px solid #2a2a52', borderRadius: 6,
-                    color: '#a78bfa', fontSize: 11, padding: '4px 10px', cursor: 'pointer',
-                  }}>Edit</button>
-                  <button onClick={() => confirmDelete(bet.id)} style={{
-                    background: 'transparent', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 6,
-                    color: '#ef4444', fontSize: 11, padding: '4px 10px', cursor: 'pointer',
-                  }}>Delete</button>
-                </div>
+                    {/* Divider */}
+                    <div style={{ width: 1, alignSelf: 'stretch', background: '#1e1e3e', flexShrink: 0 }} />
+
+                    {/* Actions */}
+                    <div style={{ display: 'flex', gap: 6, padding: '0 14px', flexShrink: 0 }}>
+                      <button onClick={() => handleEdit(bet)} style={{
+                        background: 'transparent', border: '1px solid #2a2a52', borderRadius: 6,
+                        color: '#a78bfa', fontSize: 11, padding: '4px 10px', cursor: 'pointer',
+                      }}>Edit</button>
+                      <button onClick={() => confirmDelete(bet.id)} style={{
+                        background: 'transparent', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 6,
+                        color: '#ef4444', fontSize: 11, padding: '4px 10px', cursor: 'pointer',
+                      }}>Delete</button>
+                    </div>
+                  </div>
+                ))}
               </div>
             ))}
           </div>

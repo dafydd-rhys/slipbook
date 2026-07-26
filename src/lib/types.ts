@@ -1,6 +1,5 @@
 export type BetResult = 'won' | 'lost' | 'void' | 'pending';
 export type OddsFormat = 'decimal' | 'fraction' | 'us';
-export type Currency = 'GBP' | 'EUR' | 'USD';
 
 export type BetType =
   | 'single'
@@ -31,14 +30,11 @@ export type SportType =
   | 'other';
 
 export type FilterType =
-  | 'today'
-  | 'week'
-  | 'month'
+  | 'last7'
+  | 'last30'
+  | 'last90'
   | 'year'
-  | 'all'
-  | 'biggest_win'
-  | 'biggest_lose'
-  | 'best_odds_win';
+  | 'all';
 
 export interface BetSubLeg {
   id: string;
@@ -108,13 +104,12 @@ export interface BetsData {
 
 export interface BetStats {
   totalBets: number;
-  won: number;
-  lost: number;
   pending: number;
   totalStaked: number;
   totalReturns: number;
   pnl: number;
   roi: number;
-  winRate: number;
   units: number;
+  stakedUnits: number;
+  avgOdds: number;
 }

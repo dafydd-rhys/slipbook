@@ -3,35 +3,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import BetCard from '@/components/BetCard';
 import FilterBar, { applyFilter, computeStats } from '@/components/FilterBar';
-import { Bet, FilterType, OddsFormat, Currency } from '@/lib/types';
-import { CURRENCIES } from '@/lib/currency';
+import CalendarView from '@/components/CalendarView';
+import { Bet, FilterType, OddsFormat } from '@/lib/types';
+import { groupByDay } from '@/lib/dates';
 
 const PAGE_SIZE = 10;
 const CONTENT_WIDTH = 720;
 const FMT_KEY = 'strz_odds_format';
-const CURRENCY_KEY = 'strz_currency';
 
 const SELECT_STYLE: React.CSSProperties = {
   background: '#12122a', border: '1px solid #2a2a52', borderRadius: 8,
   color: '#f1f5f9', fontSize: 12, fontWeight: 700, padding: '5px 8px',
   outline: 'none', cursor: 'pointer',
 };
-
-function formatDayLabel(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString('en-GB', {
-    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
-  });
-}
-
-function groupByDay(bets: Bet[]) {
-  const map = new Map<string, Bet[]>();
-  for (const bet of bets) {
-    const label = formatDayLabel(bet.date);
-    if (!map.has(label)) map.set(label, []);
-    map.get(label)!.push(bet);
-  }
-  return Array.from(map.entries()).map(([label, bets]) => ({ label, bets }));
-}
 
 const FORMAT_LABELS: Record<OddsFormat, string> = {
   decimal: 'Decimal',
@@ -64,10 +48,12 @@ const INFO_SECTIONS = [
   {
     title: 'Stats Explained',
     items: [
-      { term: 'P&L', def: 'Profit & Loss — total returns minus total stakes across all settled bets.' },
-      { term: 'ROI', def: 'Return on Investment — P&L as a percentage of total staked. Positive = profitable overall.' },
-      { term: 'Units', def: 'P&L measured in average stake sizes. Removes the effect of stake size so you can compare performance across different bet sizes.' },
-      { term: 'Win Rate', def: 'Percentage of settled bets that resulted in a win. Does not account for odds or stake size.' },
+      { term: 'Picks', def: 'Total number of selections placed in the selected period.' },
+      { term: 'Live Picks', def: 'Picks that are still pending — the event hasn\'t concluded yet.' },
+      { term: 'Settled Stakes', def: 'Total amount risked across settled picks, shown in units rather than currency.' },
+      { term: 'Net Units', def: 'Profit or loss shown in units rather than currency. Flat staking: every selection is advised at 1 unit. We recommend defining 1 unit as 1% of your betting bankroll, so you can scale stakes to your own bankroll size.' },
+      { term: 'ROI', def: 'Return on Investment — profit as a percentage of total staked. Positive = profitable overall.' },
+      { term: 'Avg Odds', def: 'The average price across your picks in the selected period.' },
     ],
   },
   {
@@ -82,12 +68,12 @@ const INFO_SECTIONS = [
 
 export default function Home() {
   const [allBets, setAllBets] = useState<Bet[]>([]);
-  const [filter, setFilter] = useState<FilterType>('all');
+  const [filter, setFilter] = useState<FilterType>('last30');
   const [fmt, setFmt] = useState<OddsFormat>('decimal');
-  const [currency, setCurrency] = useState<Currency>('GBP');
   const [displayCount, setDisplayCount] = useState(PAGE_SIZE);
   const [loading, setLoading] = useState(true);
   const [showInfo, setShowInfo] = useState(false);
+  const [view, setView] = useState<'day' | 'calendar'>('day');
   const sentinelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -100,18 +86,11 @@ export default function Home() {
   useEffect(() => {
     const storedFmt = localStorage.getItem(FMT_KEY) as OddsFormat | null;
     if (storedFmt) setFmt(storedFmt);
-    const storedCurrency = localStorage.getItem(CURRENCY_KEY) as Currency | null;
-    if (storedCurrency) setCurrency(storedCurrency);
   }, []);
 
   function handleFmtChange(f: OddsFormat) {
     setFmt(f);
     localStorage.setItem(FMT_KEY, f);
-  }
-
-  function handleCurrencyChange(c: Currency) {
-    setCurrency(c);
-    localStorage.setItem(CURRENCY_KEY, c);
   }
 
   const handleFilterChange = useCallback((f: FilterType) => {
@@ -177,11 +156,11 @@ export default function Home() {
       )}
 
       {/* ── Odds format toggle + info ── */}
-      <div style={{ marginTop: 12, borderBottom: '1px solid #1a1a38' }}>
+      <div style={{ marginTop: 8, borderBottom: '1px solid #1a1a38' }}>
         <div style={{
           maxWidth: CONTENT_WIDTH, margin: '0 auto', padding: '0 20px',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          height: 40,
+          height: 36,
         }}>
           {/* Info button */}
           <button
@@ -203,56 +182,86 @@ export default function Home() {
             <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.04em' }}>Guide</span>
           </button>
 
-          {/* Odds format + currency dropdowns */}
-          <div style={{ display: 'flex', gap: 8 }}>
-            <select value={fmt} onChange={e => handleFmtChange(e.target.value as OddsFormat)} style={SELECT_STYLE}>
-              {FORMATS.map(f => <option key={f} value={f}>{FORMAT_LABELS[f]}</option>)}
-            </select>
-            <select value={currency} onChange={e => handleCurrencyChange(e.target.value as Currency)} style={SELECT_STYLE}>
-              {CURRENCIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
-            </select>
-          </div>
+          {/* Odds format dropdown */}
+          <select value={fmt} onChange={e => handleFmtChange(e.target.value as OddsFormat)} style={SELECT_STYLE}>
+            {FORMATS.map(f => <option key={f} value={f}>{FORMAT_LABELS[f]}</option>)}
+          </select>
         </div>
       </div>
 
-      {/* ── Filters + Stats ── */}
-      <FilterBar active={filter} onChange={handleFilterChange} stats={stats} currency={currency} />
+      {view === 'calendar' ? (
+        <CalendarView bets={allBets} onBack={() => setView('day')} />
+      ) : (
+        <>
+          {/* ── Filters + Stats ── */}
+          <FilterBar active={filter} onChange={handleFilterChange} stats={stats} fmt={fmt} />
 
-      {/* ── Bet list ── */}
-      <div style={{ maxWidth: CONTENT_WIDTH, margin: '0 auto', padding: '20px 20px 56px' }}>
-        {loading && (
-          <div style={{ textAlign: 'center', padding: '60px 0', color: '#334155' }}>
-            <div style={{ fontSize: 32, marginBottom: 12 }}>🎲</div>
-            <p style={{ fontSize: 14 }}>Loading slips…</p>
-          </div>
-        )}
+          {/* ── Live picks badge + Calendar view toggle ── */}
+          <div style={{ maxWidth: CONTENT_WIDTH, margin: '0 auto', padding: '10px 20px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            {stats.pending > 0 ? (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 7,
+                background: 'rgba(245,158,11,0.10)', border: '1px solid rgba(245,158,11,0.3)',
+                borderRadius: 20, color: '#f59e0b', fontSize: 12, fontWeight: 700,
+                padding: '5px 14px',
+              }}>
+                <span className="animate-pulse-dot" style={{ width: 7, height: 7, borderRadius: '50%', background: '#f59e0b', display: 'block' }} />
+                {stats.pending} Live
+              </div>
+            ) : <span />}
 
-        {!loading && filtered.length === 0 && (
-          <div style={{ textAlign: 'center', padding: '60px 0', color: '#334155' }}>
-            <div style={{ fontSize: 32, marginBottom: 12 }}>📋</div>
-            <p style={{ fontSize: 14 }}>No bets for this filter.</p>
+            <button
+              onClick={() => setView('calendar')}
+              style={{
+                background: 'transparent', border: '1px solid #2a2a52', borderRadius: 20,
+                color: '#64748b', fontSize: 12, fontWeight: 400, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '5px 14px', transition: 'all 0.15s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.color = '#a78bfa'; }}
+              onMouseLeave={e => { e.currentTarget.style.color = '#64748b'; }}
+            >
+              📅 Calendar View
+            </button>
           </div>
-        )}
 
-        {groups.map(({ label, bets }, gi) => (
-          <div key={label} style={{ marginTop: gi > 0 ? 24 : 0 }}>
-            <div style={{
-              fontSize: 10, fontWeight: 700, color: '#334155',
-              letterSpacing: '0.08em', textTransform: 'uppercase',
-              paddingBottom: 10, borderBottom: '1px solid #12122a', marginBottom: 12,
-            }}>
-              {label}
-            </div>
-            {bets.map(bet => <BetCard key={bet.id} bet={bet} fmt={fmt} currency={currency} />)}
-          </div>
-        ))}
+          {/* ── Bet list ── */}
+          <div style={{ maxWidth: CONTENT_WIDTH, margin: '0 auto', padding: '10px 20px 56px' }}>
+            {loading && (
+              <div style={{ textAlign: 'center', padding: '60px 0', color: '#334155' }}>
+                <div style={{ fontSize: 32, marginBottom: 12 }}>🎲</div>
+                <p style={{ fontSize: 14 }}>Loading slips…</p>
+              </div>
+            )}
 
-        {hasMore && (
-          <div ref={sentinelRef} style={{ padding: '20px 0', textAlign: 'center', color: '#334155', fontSize: 13 }}>
-            Loading more…
+            {!loading && filtered.length === 0 && (
+              <div style={{ textAlign: 'center', padding: '60px 0', color: '#334155' }}>
+                <div style={{ fontSize: 32, marginBottom: 12 }}>📋</div>
+                <p style={{ fontSize: 14 }}>No bets for this filter.</p>
+              </div>
+            )}
+
+            {groups.map(({ label, bets }, gi) => (
+              <div key={label} style={{ marginTop: gi > 0 ? 24 : 0 }}>
+                <div style={{
+                  fontSize: 10, fontWeight: 700, color: '#334155',
+                  letterSpacing: '0.08em', textTransform: 'uppercase',
+                  paddingBottom: 10, borderBottom: '1px solid #12122a', marginBottom: 12,
+                }}>
+                  {label}
+                </div>
+                {bets.map(bet => <BetCard key={bet.id} bet={bet} fmt={fmt} />)}
+              </div>
+            ))}
+
+            {hasMore && (
+              <div ref={sentinelRef} style={{ padding: '20px 0', textAlign: 'center', color: '#334155', fontSize: 13 }}>
+                Loading more…
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        </>
+      )}
     </>
   );
 }
