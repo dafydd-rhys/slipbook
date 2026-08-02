@@ -42,6 +42,12 @@ yarn-error.log*
 # vercel
 .vercel
 
+# claude code — personal tool permissions/config and AI-assistant instructions,
+# not needed by other clones
+/.claude/
+/CLAUDE.md
+/AGENTS.md
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
