@@ -1,4 +1,4 @@
-// Server-only. Never import this from a 'use client' file.
+// Admin session cookie helpers. Server-only — never import this from a 'use client' file.
 import { createHash } from 'crypto';
 import { ADMIN_PIN } from './config';
 
@@ -11,6 +11,7 @@ export function sessionToken(): string {
   return createHash('sha256').update(ADMIN_PIN).digest('hex');
 }
 
+// True if the given session cookie value matches the current PIN's token.
 export function isValidSession(token: string | undefined | null): boolean {
   return !!token && token === sessionToken();
 }

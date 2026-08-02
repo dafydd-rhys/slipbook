@@ -1,5 +1,7 @@
 'use client';
 
+// Sticky site header — logo, theme toggle, admin link, and the main nav
+// (hidden on /admin, which has its own tab bar).
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { SITE_NAME } from '@/lib/config';
@@ -52,8 +54,14 @@ export default function Header() {
                     letterSpacing: '0.1em', padding: '6px 13px', cursor: 'pointer', transition: 'all 0.15s',
                     textTransform: 'uppercase', whiteSpace: 'nowrap',
                   }}
-                  onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--accent)'; }}
-                  onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-faint)'; }}
+                  onMouseEnter={(event) => {
+                    event.currentTarget.style.borderColor = 'var(--accent)';
+                    event.currentTarget.style.color = 'var(--accent)';
+                  }}
+                  onMouseLeave={(event) => {
+                    event.currentTarget.style.borderColor = 'var(--border)';
+                    event.currentTarget.style.color = 'var(--text-faint)';
+                  }}
                 >
                   Admin
                 </div>
@@ -64,7 +72,7 @@ export default function Header() {
 
         {!onAdmin && (
           <nav className="no-scrollbar" style={{ display: 'flex', gap: 4, overflowX: 'auto', paddingBottom: 1 }}>
-            {NAV_LINKS.map(link => {
+            {NAV_LINKS.map((link) => {
               const active = link.href === '/' ? pathname === '/' : pathname.startsWith(link.href);
               return (
                 <Link

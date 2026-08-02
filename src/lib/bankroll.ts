@@ -1,3 +1,4 @@
+// Computes the bankroll page's running-balance series from deposits/withdrawals/adjustments plus settled-bet P&L.
 import { Bet, BankrollEntry, BankrollPoint } from './types';
 
 export interface BankrollSummary {
@@ -8,9 +9,14 @@ export interface BankrollSummary {
   points: BankrollPoint[];
 }
 
-function entryDelta(e: BankrollEntry): number {
-  if (e.type === 'withdrawal') return -e.amount;
-  return e.amount; // deposit and adjustment both add (adjustment can carry a negative amount for corrections)
+// Signed balance change for one bankroll entry — withdrawals subtract,
+// deposits and adjustments add (an adjustment can itself be negative for corrections).
+function entryDelta(entry: BankrollEntry): number {
+  if (entry.type === 'withdrawal') {
+    return -entry.amount;
+  }
+
+  return entry.amount;
 }
 
 // Running balance over time: chronological merge of bankroll entries (deposits/
@@ -19,26 +25,27 @@ export function computeBankrollSeries(bets: Bet[], entries: BankrollEntry[]): Ba
   type Event = { date: string; delta: number; label?: string };
 
   const events: Event[] = [
-    ...entries.map((e): Event => ({
-      date: e.date,
-      delta: entryDelta(e),
-      label: `${e.type === 'deposit' ? 'Deposit' : e.type === 'withdrawal' ? 'Withdrawal' : 'Adjustment'}${e.note ? ` — ${e.note}` : ''}`,
+    ...entries.map((entry): Event => ({
+      date: entry.date,
+      delta: entryDelta(entry),
+      label: `${entry.type === 'deposit' ? 'Deposit' : entry.type === 'withdrawal' ? 'Withdrawal' : 'Adjustment'}${entry.note ? ` — ${entry.note}` : ''}`,
     })),
     ...bets
-      .filter(b => b.result !== 'pending')
-      .map((b): Event => ({ date: b.date, delta: (b.returns ?? 0) - b.stake })),
+      .filter((bet) => bet.result !== 'pending')
+      .map((bet): Event => ({ date: bet.date, delta: (bet.returns ?? 0) - bet.stake })),
   ].sort((a, b) => +new Date(a.date) - +new Date(b.date));
 
   let balance = 0;
   const points: BankrollPoint[] = [{ date: events[0]?.date ?? new Date().toISOString(), balance: 0 }];
-  for (const ev of events) {
-    balance += ev.delta;
-    points.push({ date: ev.date, balance, label: ev.label });
+
+  for (const event of events) {
+    balance += event.delta;
+    points.push({ date: event.date, balance, label: event.label });
   }
 
-  const totalDeposited = entries.filter(e => e.type === 'deposit').reduce((s, e) => s + e.amount, 0);
-  const totalWithdrawn = entries.filter(e => e.type === 'withdrawal').reduce((s, e) => s + e.amount, 0);
-  const bettingPnl = bets.filter(b => b.result !== 'pending').reduce((s, b) => s + (b.returns ?? 0) - b.stake, 0);
+  const totalDeposited = entries.filter((entry) => entry.type === 'deposit').reduce((sum, entry) => sum + entry.amount, 0);
+  const totalWithdrawn = entries.filter((entry) => entry.type === 'withdrawal').reduce((sum, entry) => sum + entry.amount, 0);
+  const bettingPnl = bets.filter((bet) => bet.result !== 'pending').reduce((sum, bet) => sum + (bet.returns ?? 0) - bet.stake, 0);
 
   return { currentBalance: balance, totalDeposited, totalWithdrawn, bettingPnl, points };
 }

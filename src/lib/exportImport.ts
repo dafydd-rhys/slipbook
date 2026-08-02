@@ -1,8 +1,11 @@
+// CSV/JSON export and CSV import for bets and bankroll entries — the admin Data tab.
 import { Bet, BankrollEntry } from './types';
 
+// Quotes a CSV cell if it contains a comma, quote, or newline.
 function csvCell(value: string | number): string {
-  const s = String(value);
-  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  const stringValue = String(value);
+
+  return /[",\n]/.test(stringValue) ? `"${stringValue.replace(/"/g, '""')}"` : stringValue;
 }
 
 // Legs are packed into a single column: sport|selection|market|matchup|odds|result,
@@ -13,64 +16,87 @@ const BET_COLUMNS = [
   'result', 'returns', 'cashedOut', 'notes', 'legs',
 ] as const;
 
-function legToCell(l: Bet['legs'][number]): string {
-  return [l.sport ?? 'other', l.selection, l.market, l.matchup, l.odds, l.result].join('|');
+// Packs a single leg into its pipe-delimited CSV cell.
+function legToCell(leg: Bet['legs'][number]): string {
+  return [leg.sport ?? 'other', leg.selection, leg.market, leg.matchup, leg.odds, leg.result].join('|');
 }
 
+// Every bet as a CSV row, header first.
 export function betsToCSV(bets: Bet[]): string {
-  const rows = bets.map(b => [
-    b.date, b.title, b.type, b.bookmaker ?? '', (b.tags ?? []).join(';'),
-    b.totalOdds, b.stake, b.result, b.returns ?? '', b.cashedOut ? 'yes' : '',
-    b.notes ?? '', b.legs.map(legToCell).join(';;'),
+  const rows = bets.map((bet) => [
+    bet.date, bet.title, bet.type, bet.bookmaker ?? '', (bet.tags ?? []).join(';'),
+    bet.totalOdds, bet.stake, bet.result, bet.returns ?? '', bet.cashedOut ? 'yes' : '',
+    bet.notes ?? '', bet.legs.map(legToCell).join(';;'),
   ].map(csvCell).join(','));
+
   return [BET_COLUMNS.join(','), ...rows].join('\n');
 }
 
+// Every bet as a pretty-printed JSON array.
 export function betsToJSON(bets: Bet[]): string {
   return JSON.stringify(bets, null, 2);
 }
 
 const BANKROLL_COLUMNS = ['date', 'type', 'amount', 'note'] as const;
 
+// Every bankroll entry as a CSV row, header first.
 export function bankrollToCSV(entries: BankrollEntry[]): string {
-  const rows = entries.map(e => [e.date, e.type, e.amount, e.note ?? ''].map(csvCell).join(','));
+  const rows = entries.map((entry) => [entry.date, entry.type, entry.amount, entry.note ?? ''].map(csvCell).join(','));
+
   return [BANKROLL_COLUMNS.join(','), ...rows].join('\n');
 }
 
+// Every bankroll entry as a pretty-printed JSON array.
 export function bankrollToJSON(entries: BankrollEntry[]): string {
   return JSON.stringify(entries, null, 2);
 }
 
+// Triggers a browser download of the given text content.
 export function downloadFile(filename: string, content: string, mime: string): void {
   const blob = new Blob([content], { type: mime });
   const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
+  const link = document.createElement('a');
+
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
   URL.revokeObjectURL(url);
 }
 
 // ── CSV import (round-trips betsToCSV's own format) ─────────────────────────
+
+// Splits one CSV line into cells, honoring quoted fields and escaped quotes.
 function parseCSVLine(line: string): string[] {
   const cells: string[] = [];
-  let cur = '';
+  let current = '';
   let inQuotes = false;
+
   for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
+    const char = line[i];
+
     if (inQuotes) {
-      if (ch === '"' && line[i + 1] === '"') { cur += '"'; i++; }
-      else if (ch === '"') { inQuotes = false; }
-      else { cur += ch; }
+      if (char === '"' && line[i + 1] === '"') {
+        current += '"';
+        i++;
+      } else if (char === '"') {
+        inQuotes = false;
+      } else {
+        current += char;
+      }
+    } else if (char === '"') {
+      inQuotes = true;
+    } else if (char === ',') {
+      cells.push(current);
+      current = '';
     } else {
-      if (ch === '"') inQuotes = true;
-      else if (ch === ',') { cells.push(cur); cur = ''; }
-      else cur += ch;
+      current += char;
     }
   }
-  cells.push(cur);
+
+  cells.push(current);
+
   return cells;
 }
 
@@ -80,19 +106,27 @@ export interface ImportableBet {
   legs: { sport: string; selection: string; market: string; matchup: string; odds: number; result: string }[];
 }
 
+// Parses a CSV export (this module's own format, or any file with matching
+// headers) back into importable bets.
 export function parseBetsCSV(text: string): ImportableBet[] {
-  const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
-  if (lines.length < 2) return [];
-  const header = parseCSVLine(lines[0]).map(h => h.trim());
-  const idx = (col: string) => header.indexOf(col);
+  const lines = text.split(/\r?\n/).filter((line) => line.trim().length > 0);
 
-  return lines.slice(1).map(line => {
+  if (lines.length < 2) {
+    return [];
+  }
+
+  const header = parseCSVLine(lines[0]).map((column) => column.trim());
+  const columnIndex = (column: string) => header.indexOf(column);
+
+  return lines.slice(1).map((line) => {
     const cells = parseCSVLine(line);
-    const get = (col: string) => cells[idx(col)] ?? '';
-    const legs = get('legs').split(';;').filter(Boolean).map(chunk => {
+    const get = (column: string) => cells[columnIndex(column)] ?? '';
+    const legs = get('legs').split(';;').filter(Boolean).map((chunk) => {
       const [sport, selection, market, matchup, odds, result] = chunk.split('|');
+
       return { sport: sport || 'other', selection: selection || '', market: market || '', matchup: matchup || '', odds: Number(odds) || 1, result: result || 'pending' };
     });
+
     return {
       date: get('date'),
       title: get('title'),

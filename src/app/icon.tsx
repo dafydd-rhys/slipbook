@@ -1,3 +1,4 @@
+// Generated favicon — a plain glyph of the site's first initial.
 import { ImageResponse } from 'next/og';
 import { SITE_NAME } from '@/lib/config';
 
@@ -6,6 +7,7 @@ export const contentType = 'image/png';
 
 export default function Icon() {
   const initial = (SITE_NAME.trim()[0] ?? 'S').toUpperCase();
+
   return new ImageResponse(
     (
       <div

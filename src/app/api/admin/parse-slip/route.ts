@@ -1,3 +1,4 @@
+// Screenshot import: decodes a base64 betslip image and hands it to the AI parser.
 import { NextRequest, NextResponse } from 'next/server';
 import { SESSION_COOKIE, isValidSession } from '@/lib/adminAuth';
 import { parseSlipImage } from '@/lib/slipParser';
@@ -18,13 +19,16 @@ export async function POST(req: NextRequest) {
 
   const { image } = await req.json().catch(() => ({})) as { image?: string };
   const match = image ? DATA_URL_RE.exec(image) : null;
+
   if (!match) {
     return NextResponse.json({ error: 'Expected a base64 image data URL' }, { status: 400 });
   }
+
   const [, mediaType, base64Data] = match;
 
   try {
     const result = await parseSlipImage(mediaType === 'image/jpg' ? 'image/jpeg' : mediaType, base64Data);
+
     return NextResponse.json(result);
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Failed to read screenshot' }, { status: 500 });

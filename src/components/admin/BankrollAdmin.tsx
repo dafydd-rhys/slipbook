@@ -1,24 +1,10 @@
 'use client';
 
+// "Bankroll" tab — add a deposit/withdrawal/adjustment and browse the entry history.
 import { useEffect, useState } from 'react';
 import { BankrollEntry, BankrollEntryType } from '@/lib/types';
 import { CURRENCY_SYMBOL } from '@/lib/config';
-
-const INPUT: React.CSSProperties = {
-  background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8,
-  color: 'var(--text)', fontFamily: 'var(--font-body)', fontSize: 13, padding: '8px 10px', width: '100%', outline: 'none',
-};
-const LABEL: React.CSSProperties = {
-  fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--text-faint)', fontWeight: 700, letterSpacing: '0.06em',
-  display: 'block', marginBottom: 4, textTransform: 'uppercase',
-};
-const SECTION: React.CSSProperties = {
-  background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: 16, marginBottom: 14,
-};
-const SECTION_TITLE: React.CSSProperties = {
-  fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--accent)', fontWeight: 700, letterSpacing: '0.1em',
-  marginBottom: 14, textTransform: 'uppercase',
-};
+import { INPUT, LABEL, SECTION, SECTION_TITLE } from './adminPanelStyles';
 
 const TYPE_COLORS: Record<BankrollEntryType, string> = {
   deposit: 'var(--won)', withdrawal: 'var(--lost)', adjustment: 'var(--pending)',
@@ -34,22 +20,37 @@ export default function BankrollAdmin() {
   const [saving, setSaving] = useState(false);
 
   async function refresh() {
-    setEntries(await fetch('/api/bankroll').then(r => r.json()));
+    setEntries(await fetch('/api/bankroll').then((response) => response.json()));
   }
+
   useEffect(() => {
-    fetch('/api/bankroll').then(r => r.json()).then(data => { setEntries(data); setLoading(false); });
+    fetch('/api/bankroll').then((response) => response.json()).then((data) => {
+      setEntries(data);
+      setLoading(false);
+    });
   }, []);
 
-  async function handleAdd(e: React.FormEvent) {
-    e.preventDefault();
-    if (!amount || saving) return;
+  async function handleAdd(event: React.FormEvent) {
+    event.preventDefault();
+
+    if (!amount || saving) {
+      return;
+    }
+
     setSaving(true);
+
     const res = await fetch('/api/bankroll', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ date: new Date(date).toISOString(), type, amount: parseFloat(amount) || 0, note: note || undefined }),
     });
-    if (res.ok) { setAmount(''); setNote(''); await refresh(); }
+
+    if (res.ok) {
+      setAmount('');
+      setNote('');
+      await refresh();
+    }
+
     setSaving(false);
   }
 
@@ -68,7 +69,7 @@ export default function BankrollAdmin() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
             <div>
               <label style={LABEL}>Type</label>
-              <select value={type} onChange={e => setType(e.target.value as BankrollEntryType)} style={{ ...INPUT, color: TYPE_COLORS[type] }}>
+              <select value={type} onChange={(event) => setType(event.target.value as BankrollEntryType)} style={{ ...INPUT, color: TYPE_COLORS[type] }}>
                 <option value="deposit">Deposit</option>
                 <option value="withdrawal">Withdrawal</option>
                 <option value="adjustment">Adjustment</option>
@@ -76,16 +77,16 @@ export default function BankrollAdmin() {
             </div>
             <div>
               <label style={LABEL}>Amount ({CURRENCY_SYMBOL})</label>
-              <input value={amount} onChange={e => setAmount(e.target.value)} inputMode="decimal" placeholder="0.00" style={{ ...INPUT, fontFamily: 'var(--font-mono)' }} required />
+              <input value={amount} onChange={(event) => setAmount(event.target.value)} inputMode="decimal" placeholder="0.00" style={{ ...INPUT, fontFamily: 'var(--font-mono)' }} required />
             </div>
           </div>
           <div style={{ marginBottom: 10 }}>
             <label style={LABEL}>Date</label>
-            <input type="date" value={date} onChange={e => setDate(e.target.value)} style={INPUT} required />
+            <input type="date" value={date} onChange={(event) => setDate(event.target.value)} style={INPUT} required />
           </div>
           <div style={{ marginBottom: 12 }}>
             <label style={LABEL}>Note (optional)</label>
-            <input value={note} onChange={e => setNote(e.target.value)} placeholder="e.g. Monthly top-up" style={INPUT} />
+            <input value={note} onChange={(event) => setNote(event.target.value)} placeholder="e.g. Monthly top-up" style={INPUT} />
           </div>
           <button type="submit" disabled={saving || !amount} style={{
             width: '100%', background: 'var(--accent)', border: 'none', borderRadius: 10,
@@ -104,26 +105,26 @@ export default function BankrollAdmin() {
         ) : sorted.length === 0 ? (
           <p style={{ fontSize: 12, color: 'var(--text-faint)', textAlign: 'center', padding: '16px 0' }}>No entries yet.</p>
         ) : (
-          sorted.map(e => (
-            <div key={e.id} style={{
+          sorted.map((entry) => (
+            <div key={entry.id} style={{
               display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0',
               borderTop: '1px solid var(--border-soft)',
             }}>
               <span style={{
                 fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 700, padding: '3px 7px', borderRadius: 5,
-                background: `color-mix(in srgb, ${TYPE_COLORS[e.type]} 14%, transparent)`, color: TYPE_COLORS[e.type], flexShrink: 0,
+                background: `color-mix(in srgb, ${TYPE_COLORS[entry.type]} 14%, transparent)`, color: TYPE_COLORS[entry.type], flexShrink: 0,
               }}>
-                {e.type.toUpperCase()}
+                {entry.type.toUpperCase()}
               </span>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <span className="tabular" style={{ fontFamily: 'var(--font-mono)', fontSize: 12.5, fontWeight: 600, color: 'var(--text)' }}>
-                  {e.type === 'withdrawal' ? '-' : '+'}{CURRENCY_SYMBOL}{e.amount.toFixed(2)}
+                  {entry.type === 'withdrawal' ? '-' : '+'}{CURRENCY_SYMBOL}{entry.amount.toFixed(2)}
                 </span>
                 <span style={{ fontSize: 11, color: 'var(--text-faint)', marginLeft: 8 }}>
-                  {new Date(e.date).toLocaleDateString('en-GB')}{e.note ? ` · ${e.note}` : ''}
+                  {new Date(entry.date).toLocaleDateString('en-GB')}{entry.note ? ` · ${entry.note}` : ''}
                 </span>
               </div>
-              <button onClick={() => handleDelete(e.id)} style={{
+              <button onClick={() => handleDelete(entry.id)} style={{
                 background: 'transparent', border: '1px solid color-mix(in srgb, var(--lost) 30%, transparent)', borderRadius: 6,
                 color: 'var(--lost)', fontSize: 11, padding: '3px 9px', cursor: 'pointer', flexShrink: 0,
               }}>

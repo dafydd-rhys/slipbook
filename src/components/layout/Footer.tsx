@@ -1,3 +1,4 @@
+// Site footer — name and a Knowledge Base link, shown on every page via the root layout.
 import Link from 'next/link';
 import { SITE_NAME } from '@/lib/config';
 

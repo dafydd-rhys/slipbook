@@ -1,13 +1,17 @@
 'use client';
 
+// Public bankroll page: current balance, deposit/withdrawal/P&L stat tiles,
+// the running-balance chart, and an optional full entry list.
 import { useEffect, useState } from 'react';
 import { Bet, BankrollEntry } from '@/lib/types';
 import { computeBankrollSeries } from '@/lib/bankroll';
 import { formatUnits } from '@/lib/units';
-import BankrollChart from '@/components/BankrollChart';
+import BankrollChart from '@/components/charts/BankrollChart';
+import Spinner from '@/components/Spinner';
 
 const CONTENT_WIDTH = 720;
 
+// Small labelled number tile used for the top-line balance/deposit/withdrawal/P&L stats.
 function StatTile({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
     <div style={{ flex: 1, minWidth: 120, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: '13px 14px' }}>
@@ -17,6 +21,7 @@ function StatTile({ label, value, color }: { label: string; value: string; color
   );
 }
 
+// Public bankroll page — see file header.
 export default function BankrollPage() {
   const [bets, setBets] = useState<Bet[]>([]);
   const [entries, setEntries] = useState<BankrollEntry[]>([]);
@@ -25,9 +30,13 @@ export default function BankrollPage() {
 
   useEffect(() => {
     Promise.all([
-      fetch('/api/bets').then(r => r.json()),
-      fetch('/api/bankroll').then(r => r.json()),
-    ]).then(([b, e]) => { setBets(b); setEntries(e); setLoading(false); }).catch(() => setLoading(false));
+      fetch('/api/bets').then((response) => response.json()),
+      fetch('/api/bankroll').then((response) => response.json()),
+    ]).then(([betsData, entriesData]) => {
+      setBets(betsData);
+      setEntries(entriesData);
+      setLoading(false);
+    }).catch(() => setLoading(false));
   }, []);
 
   const series = computeBankrollSeries(bets, entries);
@@ -43,11 +52,7 @@ export default function BankrollPage() {
 
       {loading ? (
         <div style={{ textAlign: 'center', padding: '60px 0' }}>
-          <span aria-hidden style={{
-            display: 'inline-block', width: 30, height: 30, borderRadius: '50%',
-            border: '3px solid var(--border)', borderTopColor: 'var(--accent)',
-            animation: 'spin 0.8s linear infinite',
-          }} />
+          <Spinner />
         </div>
       ) : (
         <>
@@ -63,7 +68,7 @@ export default function BankrollPage() {
           </div>
 
           <button
-            onClick={() => setShowTable(s => !s)}
+            onClick={() => setShowTable((shown) => !shown)}
             style={{
               background: 'transparent', border: '1px solid var(--border)', borderRadius: 20,
               color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 600,
@@ -81,23 +86,23 @@ export default function BankrollPage() {
               {entries
                 .slice()
                 .sort((a, b) => +new Date(b.date) - +new Date(a.date))
-                .map((e, i) => (
-                  <div key={e.id} style={{
+                .map((entry, index) => (
+                  <div key={entry.id} style={{
                     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                     padding: '10px 14px', background: 'var(--surface)',
-                    borderTop: i > 0 ? '1px solid var(--border-soft)' : undefined,
+                    borderTop: index > 0 ? '1px solid var(--border-soft)' : undefined,
                   }}>
                     <div>
-                      <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text)', textTransform: 'capitalize' }}>{e.type}</div>
+                      <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text)', textTransform: 'capitalize' }}>{entry.type}</div>
                       <div style={{ fontSize: 11, color: 'var(--text-faint)' }}>
-                        {new Date(e.date).toLocaleDateString('en-GB')}{e.note ? ` — ${e.note}` : ''}
+                        {new Date(entry.date).toLocaleDateString('en-GB')}{entry.note ? ` — ${entry.note}` : ''}
                       </div>
                     </div>
                     <span className="tabular" style={{
                       fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: 13,
-                      color: e.type === 'withdrawal' ? 'var(--lost)' : 'var(--won)',
+                      color: entry.type === 'withdrawal' ? 'var(--lost)' : 'var(--won)',
                     }}>
-                      {e.type === 'withdrawal' ? '−' : '+'}{formatUnits(e.amount)}
+                      {entry.type === 'withdrawal' ? '−' : '+'}{formatUnits(entry.amount)}
                     </span>
                   </div>
                 ))}

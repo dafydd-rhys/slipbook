@@ -1,22 +1,15 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-
-export function useAiEnabled(): boolean | null {
-  const [enabled, setEnabled] = useState<boolean | null>(null);
-  useEffect(() => {
-    fetch('/api/ai-status').then(r => r.json()).then(d => setEnabled(!!d.enabled)).catch(() => setEnabled(false));
-  }, []);
-  return enabled;
-}
-
 // Dims whatever's passed in and overlays a message + Knowledge Base link when
 // ANTHROPIC_API_KEY isn't configured. `enabled === null` (still loading)
 // renders children normally rather than flashing the overlay on every load.
 export default function AiGate({ enabled, anchor = 'import', children }: {
   enabled: boolean | null; anchor?: string; children: React.ReactNode;
 }) {
-  if (enabled !== false) return <>{children}</>;
+  if (enabled !== false) {
+    return <>{children}</>;
+  }
+
   return (
     <div style={{ position: 'relative' }}>
       <div style={{ opacity: 0.35, pointerEvents: 'none', filter: 'grayscale(0.4)' }} aria-hidden>
