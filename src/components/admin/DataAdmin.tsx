@@ -1,21 +1,17 @@
 'use client';
 
+// "Data" tab — export bets/bankroll as CSV or JSON, and import bets from a file.
 import { useRef, useState } from 'react';
 import { Bet, BankrollEntry } from '@/lib/types';
 import { betsToCSV, betsToJSON, bankrollToCSV, bankrollToJSON, downloadFile, parseBetsCSV, ImportableBet } from '@/lib/exportImport';
+import { SECTION, SECTION_TITLE } from './adminPanelStyles';
 
-const SECTION: React.CSSProperties = {
-  background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: 16, marginBottom: 14,
-};
-const SECTION_TITLE: React.CSSProperties = {
-  fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--accent)', fontWeight: 700, letterSpacing: '0.1em',
-  marginBottom: 14, textTransform: 'uppercase',
-};
 const BTN: React.CSSProperties = {
   background: 'transparent', border: '1px solid var(--border)', borderRadius: 8,
   color: 'var(--accent)', fontSize: 12.5, fontWeight: 600, padding: '8px 14px', cursor: 'pointer',
 };
 
+// Today's date as YYYY-MM-DD, used in export filenames.
 function todayStamp(): string {
   return new Date().toISOString().slice(0, 10);
 }
@@ -27,35 +23,49 @@ export default function DataAdmin({ bets, onImported }: { bets: Bet[]; onImporte
   const [error, setError] = useState('');
 
   async function exportBankroll(format: 'csv' | 'json') {
-    const entries: BankrollEntry[] = await fetch('/api/bankroll').then(r => r.json());
-    if (format === 'csv') downloadFile(`bankroll-${todayStamp()}.csv`, bankrollToCSV(entries), 'text/csv');
-    else downloadFile(`bankroll-${todayStamp()}.json`, bankrollToJSON(entries), 'application/json');
+    const entries: BankrollEntry[] = await fetch('/api/bankroll').then((response) => response.json());
+
+    if (format === 'csv') {
+      downloadFile(`bankroll-${todayStamp()}.csv`, bankrollToCSV(entries), 'text/csv');
+    } else {
+      downloadFile(`bankroll-${todayStamp()}.json`, bankrollToJSON(entries), 'application/json');
+    }
   }
 
   async function handleFile(file: File) {
     setImporting(true);
     setError('');
     setResult('');
+
     try {
       const text = await file.text();
       let importBets: ImportableBet[];
+
       if (file.name.endsWith('.json')) {
         const parsed = JSON.parse(text);
+
         importBets = Array.isArray(parsed) ? parsed : [];
       } else {
         importBets = parseBetsCSV(text);
       }
-      if (importBets.length === 0) throw new Error('No bets found in file');
+
+      if (importBets.length === 0) {
+        throw new Error('No bets found in file');
+      }
 
       const res = await fetch('/api/admin/import', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bets: importBets }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Import failed');
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Import failed');
+      }
+
       setResult(`Imported ${data.imported} bet${data.imported !== 1 ? 's' : ''}.`);
       onImported();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Import failed');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Import failed');
     } finally {
       setImporting(false);
     }
@@ -87,7 +97,15 @@ export default function DataAdmin({ bets, onImported }: { bets: Bet[]; onImporte
         </p>
         <input
           ref={fileRef} type="file" accept=".csv,.json" style={{ display: 'none' }} disabled={importing}
-          onChange={e => { const file = e.target.files?.[0]; if (file) handleFile(file); e.target.value = ''; }}
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+
+            if (file) {
+              handleFile(file);
+            }
+
+            event.target.value = '';
+          }}
         />
         <button
           onClick={() => fileRef.current?.click()}

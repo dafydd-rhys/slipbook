@@ -1,5 +1,6 @@
 'use client';
 
+// Progress bar toward the admin-set goal, shown on Insights while a goal is active.
 import { useEffect, useState } from 'react';
 import { Bet, Goal } from '@/lib/types';
 import { toUnits } from '@/lib/units';
@@ -8,10 +9,12 @@ export default function GoalProgress({ bets }: { bets: Bet[] }) {
   const [goal, setGoal] = useState<Goal | null>(null);
 
   useEffect(() => {
-    fetch('/api/goal').then(r => r.ok ? r.json() : null).then(setGoal).catch(() => {});
+    fetch('/api/goal').then((response) => response.ok ? response.json() : null).then(setGoal).catch(() => {});
   }, []);
 
-  if (!goal) return null;
+  if (!goal) {
+    return null;
+  }
 
   const start = new Date(goal.startDate);
   const deadline = new Date(goal.deadline);
@@ -19,8 +22,8 @@ export default function GoalProgress({ bets }: { bets: Bet[] }) {
 
   const progressUnits = toUnits(
     bets
-      .filter(b => b.result !== 'pending' && new Date(b.date) >= start)
-      .reduce((s, b) => s + ((b.returns ?? 0) - b.stake), 0)
+      .filter((bet) => bet.result !== 'pending' && new Date(bet.date) >= start)
+      .reduce((sum, bet) => sum + ((bet.returns ?? 0) - bet.stake), 0)
   );
 
   const pct = goal.targetUnits !== 0 ? Math.max(0, Math.min(100, (progressUnits / goal.targetUnits) * 100)) : 0;

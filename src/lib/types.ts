@@ -1,4 +1,6 @@
+// Core domain types shared across the whole app — bets, bankroll, templates, analytics, goal.
 export type BetResult = 'won' | 'lost' | 'void' | 'pending';
+
 export type OddsFormat = 'decimal' | 'fraction' | 'us';
 
 export type BetType =

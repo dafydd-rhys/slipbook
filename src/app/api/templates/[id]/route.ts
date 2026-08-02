@@ -1,5 +1,6 @@
+// Delete a bet template (admin only).
 import { NextRequest, NextResponse } from 'next/server';
-import { deleteTemplate } from '@/lib/db';
+import { deleteTemplate } from '@/lib/storage';
 import { SESSION_COOKIE, isValidSession } from '@/lib/adminAuth';
 
 export async function DELETE(
@@ -9,8 +10,13 @@ export async function DELETE(
   if (!isValidSession(req.cookies.get(SESSION_COOKIE)?.value)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+
   const { id } = await params;
   const ok = await deleteTemplate(id);
-  if (!ok) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
+  if (!ok) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
+
   return NextResponse.json({ success: true });
 }

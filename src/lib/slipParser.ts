@@ -8,6 +8,7 @@ const SPORTS: SportType[] = [
   'football', 'tennis', 'basketball', 'esports', 'cricket', 'horse_racing',
   'golf', 'rugby', 'boxing', 'mma', 'darts', 'baseball', 'other',
 ];
+
 const RESULTS: BetResult[] = ['won', 'lost', 'void', 'pending'];
 
 export interface ParsedSubLeg {
@@ -37,6 +38,7 @@ export interface ParsedSlip {
 interface RawLeg extends ParsedLeg {
   dateTime: string | null;
 }
+
 interface RawSlip {
   betDateTime: string | null;
   stake: number | null;
@@ -97,6 +99,7 @@ const SCHEMA = {
   additionalProperties: false,
 } as const;
 
+// Instructions given to the model alongside the betslip screenshot.
 function promptFor(nowIso: string): string {
   return `You are extracting structured data from a screenshot of a sports betting slip (a bet confirmation or bet history entry from a bookmaker app or website).
 
@@ -120,21 +123,35 @@ Also extract:
 If a value is hard to read, make your best reasonable estimate rather than leaving it blank.`;
 }
 
-function isValidIsoDate(s: string | null): s is string {
-  return !!s && !Number.isNaN(Date.parse(s));
+// True if the string parses as a valid date — used to fall back cleanly when
+// the model returns null or an unparseable value.
+function isValidIsoDate(value: string | null): value is string {
+  return !!value && !Number.isNaN(Date.parse(value));
 }
 
+// Resolves the bet's overall date: the model's top-level betDateTime if
+// valid, else the last leg's own date-time, else "now".
 function resolveDate(betDateTime: string | null, legs: RawLeg[]): string {
-  if (isValidIsoDate(betDateTime)) return betDateTime;
+  if (isValidIsoDate(betDateTime)) {
+    return betDateTime;
+  }
+
   const lastLeg = legs[legs.length - 1];
-  if (lastLeg && isValidIsoDate(lastLeg.dateTime)) return lastLeg.dateTime;
+
+  if (lastLeg && isValidIsoDate(lastLeg.dateTime)) {
+    return lastLeg.dateTime;
+  }
+
   return new Date().toISOString();
 }
 
+// Converts the model's raw response shape into the public ParsedSlip shape,
+// resolving the overall date and dropping the per-leg dateTime field.
 function rawToParsedSlip(raw: RawSlip): ParsedSlip {
   if (!Array.isArray(raw.legs) || raw.legs.length === 0) {
     throw new Error('No legs found');
   }
+
   return {
     date: resolveDate(raw.betDateTime, raw.legs),
     stake: raw.stake,
@@ -151,6 +168,7 @@ function rawToParsedSlip(raw: RawSlip): ParsedSlip {
   };
 }
 
+// Reads a betslip screenshot and returns its parsed bet shape.
 export async function parseSlipImage(mediaType: string, base64Data: string): Promise<ParsedSlip> {
   const anthropic = new Anthropic();
   const now = new Date().toISOString();
@@ -177,11 +195,16 @@ export async function parseSlipImage(mediaType: string, base64Data: string): Pro
     ],
   });
 
-  const textBlock = response.content.find((b): b is Anthropic.TextBlock => b.type === 'text');
-  if (!textBlock) throw new Error('No text response from model');
+  const textBlock = response.content.find((block): block is Anthropic.TextBlock => block.type === 'text');
+
+  if (!textBlock) {
+    throw new Error('No text response from model');
+  }
+
   return rawToParsedSlip(JSON.parse(textBlock.text) as RawSlip);
 }
 
+// Instructions given to the model alongside a plain-English bet description.
 function textPromptFor(nowIso: string): string {
   return `You are converting a natural-language description of a sports bet — written by the person placing it — into structured data.
 
@@ -203,6 +226,7 @@ Also extract betDateTime (ISO 8601 or null) and stake (a plain number, or null i
 Do not invent specifics (team names, markets, odds) that were not stated or clearly implied — leave fields as their default/placeholder rather than fabricating detail.`;
 }
 
+// Converts a plain-English bet description into a parsed bet shape.
 export async function parseSlipText(text: string): Promise<ParsedSlip> {
   const anthropic = new Anthropic();
   const now = new Date().toISOString();
@@ -223,8 +247,12 @@ export async function parseSlipText(text: string): Promise<ParsedSlip> {
     ],
   });
 
-  const textBlock = response.content.find((b): b is Anthropic.TextBlock => b.type === 'text');
-  if (!textBlock) throw new Error('No text response from model');
+  const textBlock = response.content.find((block): block is Anthropic.TextBlock => block.type === 'text');
+
+  if (!textBlock) {
+    throw new Error('No text response from model');
+  }
+
   return rawToParsedSlip(JSON.parse(textBlock.text) as RawSlip);
 }
 
@@ -235,44 +263,39 @@ export interface SettleLegSuggestion {
   confidence: 'high' | 'medium' | 'low';
   note: string;
 }
+
 export interface SettleSuggestion {
   legs: SettleLegSuggestion[];
   summary: string;
 }
 
+// Pulls the first {...} JSON object out of the model's response text,
+// tolerating markdown code fences and any stray prose around it.
 function extractJsonObject(text: string): unknown {
   const stripped = text.replace(/```(?:json)?/gi, '').trim();
   const start = stripped.indexOf('{');
   const end = stripped.lastIndexOf('}');
+
   if (start === -1 || end === -1 || end <= start) {
     throw new Error('Could not find a JSON object in the model response');
   }
+
   return JSON.parse(stripped.slice(start, end + 1));
 }
 
-export async function suggestSettlement(input: {
+type SettleInput = {
   title: string;
   eventDate: string;
   legs: { selection: string; market: string; matchup: string; sport: SportType }[];
-}): Promise<SettleSuggestion> {
-  const anthropic = new Anthropic();
+};
 
+// Instructions given to the model for the web-search settlement-suggestion request.
+function settlementPromptFor(input: SettleInput): string {
   const legList = input.legs
-    .map((l, i) => `${i}. [${l.sport}] ${l.selection} — ${l.market}${l.matchup ? ` — ${l.matchup}` : ''}`)
+    .map((leg, index) => `${index}. [${leg.sport}] ${leg.selection} — ${leg.market}${leg.matchup ? ` — ${leg.matchup}` : ''}`)
     .join('\n');
 
-  const response = await anthropic.messages.create({
-    model: 'claude-opus-5',
-    max_tokens: 4096,
-    thinking: { type: 'adaptive' },
-    output_config: { effort: 'high' },
-    tools: [{ type: 'web_search_20260209', name: 'web_search' }],
-    messages: [
-      {
-        role: 'user',
-        content: [{
-          type: 'text',
-          text: `Search the web to find the outcome of each leg of this bet, "${input.title}", from an event around ${input.eventDate}:
+  return `Search the web to find the outcome of each leg of this bet, "${input.title}", from an event around ${input.eventDate}:
 
 ${legList}
 
@@ -281,24 +304,46 @@ For each leg, determine whether the selection won, lost, or was voided (e.g. pos
 After researching, respond with ONLY a JSON object (no prose before or after, no markdown fences) in exactly this shape:
 {"legs": [{"index": 0, "result": "won"|"lost"|"void"|"pending", "confidence": "high"|"medium"|"low", "note": "one short sentence — the final score/outcome and source"}], "summary": "one short sentence overall"}
 
-The "legs" array must have exactly ${input.legs.length} entries, one per index 0 to ${input.legs.length - 1}, in order.`,
-        }],
-      },
+The "legs" array must have exactly ${input.legs.length} entries, one per index 0 to ${input.legs.length - 1}, in order.`;
+}
+
+// Web-searches each leg of a pending bet and proposes a settlement — always
+// a suggestion for the admin to review, never applied automatically.
+export async function suggestSettlement(input: SettleInput): Promise<SettleSuggestion> {
+  const anthropic = new Anthropic();
+
+  const response = await anthropic.messages.create({
+    model: 'claude-opus-5',
+    max_tokens: 4096,
+    thinking: { type: 'adaptive' },
+    output_config: { effort: 'high' },
+    tools: [{ type: 'web_search_20260209', name: 'web_search' }],
+    messages: [
+      { role: 'user', content: [{ type: 'text', text: settlementPromptFor(input) }] },
     ],
   });
 
   const text = response.content
-    .filter((b): b is Anthropic.TextBlock => b.type === 'text')
-    .map(b => b.text)
+    .filter((block): block is Anthropic.TextBlock => block.type === 'text')
+    .map((block) => block.text)
     .join('\n');
-  if (!text.trim()) throw new Error('No text response from model');
+
+  if (!text.trim()) {
+    throw new Error('No text response from model');
+  }
 
   const parsed = extractJsonObject(text) as SettleSuggestion;
-  if (!Array.isArray(parsed.legs)) throw new Error('Malformed settlement suggestion');
+
+  if (!Array.isArray(parsed.legs)) {
+    throw new Error('Malformed settlement suggestion');
+  }
+
   return parsed;
 }
 
 // ── AI performance summary ─────────────────────────────────────────────────────
+
+// Generates a short plain-English performance summary from precomputed stats text.
 export async function generateSummary(statsText: string, periodLabel: string): Promise<string> {
   const anthropic = new Anthropic();
 
@@ -322,6 +367,7 @@ Write 2-4 sentences, second person ("you"), factual and grounded only in the num
     ],
   });
 
-  const textBlock = response.content.find((b): b is Anthropic.TextBlock => b.type === 'text');
+  const textBlock = response.content.find((block): block is Anthropic.TextBlock => block.type === 'text');
+
   return textBlock?.text.trim() ?? '';
 }

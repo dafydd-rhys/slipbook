@@ -1,21 +1,34 @@
 'use client';
 
+// Light/dark theme switch — stores the choice in localStorage and toggles a
+// data-theme attribute on <html> that globals.css keys its palette off.
 import { useEffect, useState } from 'react';
 
+// Reads the currently-applied theme, falling back to the OS preference on first render.
 function currentTheme(): 'dark' | 'light' {
-  if (typeof document === 'undefined') return 'dark';
+  if (typeof document === 'undefined') {
+    return 'dark';
+  }
+
   const attr = document.documentElement.getAttribute('data-theme');
-  if (attr === 'dark' || attr === 'light') return attr;
+
+  if (attr === 'dark' || attr === 'light') {
+    return attr;
+  }
+
   return window.matchMedia?.('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
 }
 
 export default function ThemeToggle() {
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
 
-  useEffect(() => { Promise.resolve().then(() => setTheme(currentTheme())); }, []);
+  useEffect(() => {
+    Promise.resolve().then(() => setTheme(currentTheme()));
+  }, []);
 
   function toggle() {
     const next = theme === 'dark' ? 'light' : 'dark';
+
     document.documentElement.setAttribute('data-theme', next);
     localStorage.setItem('theme', next);
     setTheme(next);
@@ -33,8 +46,14 @@ export default function ThemeToggle() {
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         transition: 'all 0.15s',
       }}
-      onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--accent)'; }}
-      onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-faint)'; }}
+      onMouseEnter={(event) => {
+        event.currentTarget.style.borderColor = 'var(--accent)';
+        event.currentTarget.style.color = 'var(--accent)';
+      }}
+      onMouseLeave={(event) => {
+        event.currentTarget.style.borderColor = 'var(--border)';
+        event.currentTarget.style.color = 'var(--text-faint)';
+      }}
     >
       {theme === 'dark' ? (
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none">

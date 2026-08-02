@@ -1,5 +1,6 @@
+// Public health check — reports which storage backend is active and a rough bet count.
 import { NextResponse } from 'next/server';
-import { readBets } from '@/lib/db';
+import { readBets } from '@/lib/storage';
 
 export async function GET() {
   const usingRedis = !!(process.env.UPSTASH_REDIS_REST_URL ?? process.env.KV_REST_API_URL);

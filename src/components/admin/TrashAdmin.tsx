@@ -1,22 +1,18 @@
 'use client';
 
+// "Trash" tab — restore a soft-deleted bet or purge it permanently before its retention window ends.
 import { useEffect, useState } from 'react';
 import { Bet } from '@/lib/types';
 import { CURRENCY_SYMBOL } from '@/lib/config';
-
-const SECTION: React.CSSProperties = {
-  background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: 16, marginBottom: 14,
-};
-const SECTION_TITLE: React.CSSProperties = {
-  fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--accent)', fontWeight: 700, letterSpacing: '0.1em',
-  marginBottom: 14, textTransform: 'uppercase',
-};
+import { SECTION, SECTION_TITLE } from './adminPanelStyles';
 
 const RETENTION_DAYS = 30;
 
+// Days remaining before a trashed bet is purged automatically.
 function daysLeft(deletedAt: string): number {
   const ageMs = Date.now() - new Date(deletedAt).getTime();
   const remaining = RETENTION_DAYS - Math.floor(ageMs / (24 * 60 * 60 * 1000));
+
   return Math.max(0, remaining);
 }
 
@@ -27,10 +23,14 @@ export default function TrashAdmin({ onChanged }: { onChanged: () => void }) {
 
   function load() {
     setLoading(true);
-    fetch('/api/admin/trash').then(r => r.json()).then(setTrash).finally(() => setLoading(false));
+    fetch('/api/admin/trash').then((response) => response.json()).then(setTrash).finally(() => setLoading(false));
   }
+
   useEffect(() => {
-    fetch('/api/admin/trash').then(r => r.json()).then(data => { setTrash(data); setLoading(false); });
+    fetch('/api/admin/trash').then((response) => response.json()).then((data) => {
+      setTrash(data);
+      setLoading(false);
+    });
   }, []);
 
   async function handleRestore(id: string) {
@@ -42,7 +42,10 @@ export default function TrashAdmin({ onChanged }: { onChanged: () => void }) {
   }
 
   async function handlePurge(id: string) {
-    if (!window.confirm('Permanently delete this bet? This cannot be undone.')) return;
+    if (!window.confirm('Permanently delete this bet? This cannot be undone.')) {
+      return;
+    }
+
     setBusyId(id);
     await fetch(`/api/admin/trash/${id}`, { method: 'DELETE' });
     load();
@@ -60,7 +63,7 @@ export default function TrashAdmin({ onChanged }: { onChanged: () => void }) {
       ) : trash.length === 0 ? (
         <p style={{ fontSize: 12, color: 'var(--text-faint)', textAlign: 'center', padding: '20px 0' }}>Trash is empty.</p>
       ) : (
-        trash.map(bet => (
+        trash.map((bet) => (
           <div key={bet.id} style={{
             display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0',
             borderTop: '1px solid var(--border-soft)', opacity: busyId === bet.id ? 0.5 : 1,

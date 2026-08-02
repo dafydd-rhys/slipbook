@@ -8,6 +8,7 @@ import { SITE_NAME } from '@/lib/config';
 export async function GET(req: NextRequest) {
   const size = Number(req.nextUrl.searchParams.get('size')) || 512;
   const initial = (SITE_NAME.trim()[0] ?? 'S').toUpperCase();
+
   return new ImageResponse(
     (
       <div

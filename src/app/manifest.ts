@@ -1,3 +1,4 @@
+// PWA manifest — lets the app be installed to a home screen.
 import type { MetadataRoute } from 'next';
 import { SITE_NAME, SITE_DESCRIPTION } from '@/lib/config';
 
