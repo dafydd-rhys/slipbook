@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { readBets, addBet } from '@/lib/db';
 import { Bet } from '@/lib/types';
+import { SESSION_COOKIE, isValidSession } from '@/lib/adminAuth';
 
 export async function GET() {
   const data = await readBets();
@@ -8,7 +9,7 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  if (req.headers.get('x-admin-key') !== '131275') {
+  if (!isValidSession(req.cookies.get(SESSION_COOKIE)?.value)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   const body = await req.json() as Omit<Bet, 'id'>;

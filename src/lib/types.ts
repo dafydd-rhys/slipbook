@@ -32,6 +32,7 @@ export type SportType =
 export type FilterType =
   | 'last7'
   | 'last30'
+  | 'last60'
   | 'last90'
   | 'year'
   | 'all';
@@ -96,10 +97,81 @@ export interface Bet {
   returns?: number;
   cashedOut?: boolean;
   notes?: string;
+  bookmaker?: string;
+  tags?: string[];
+  deletedAt?: string; // soft-delete marker — set instead of removing, purged after a retention window
 }
 
 export interface BetsData {
   bets: Bet[];
+}
+
+// ── Bankroll ──────────────────────────────────────────────────────────────────
+export type BankrollEntryType = 'deposit' | 'withdrawal' | 'adjustment';
+
+export interface BankrollEntry {
+  id: string;
+  date: string;
+  type: BankrollEntryType;
+  amount: number; // real currency, always a positive magnitude — `type` determines sign
+  note?: string;
+}
+
+export interface BankrollData {
+  entries: BankrollEntry[];
+}
+
+export interface BankrollPoint {
+  date: string;
+  balance: number;
+  label?: string; // set on deposit/withdrawal/adjustment points
+}
+
+// ── Bet templates ────────────────────────────────────────────────────────────
+export interface BetTemplateLeg {
+  selection: string;
+  market: string;
+  matchup: string;
+  sport: SportType;
+}
+
+export interface BetTemplate {
+  id: string;
+  name: string;
+  type: BetType;
+  bookmaker?: string;
+  legs: BetTemplateLeg[];
+}
+
+export interface BetTemplatesData {
+  templates: BetTemplate[];
+}
+
+// ── Analytics ────────────────────────────────────────────────────────────────
+export interface BreakdownRow {
+  key: string;         // sport code / bet type / day name / odds bucket / etc.
+  label: string;
+  bets: number;
+  staked: number;
+  returns: number;
+  pnl: number;
+  units: number;
+  roi: number;
+  winRate: number; // 0-100, over settled (non-void, non-pending) bets
+}
+
+export interface StreakInfo {
+  currentType: 'won' | 'lost' | 'none';
+  currentLength: number;
+  longestWin: number;
+  longestLoss: number;
+}
+
+export interface DrawdownInfo {
+  maxDrawdownUnits: number;
+  maxDrawdownPct: number; // relative to the peak units at the time
+  currentDrawdownUnits: number;
+  peakUnits: number;
 }
 
 export interface BetStats {
@@ -112,4 +184,13 @@ export interface BetStats {
   units: number;
   stakedUnits: number;
   avgOdds: number;
+}
+
+// ── Goal tracking ────────────────────────────────────────────────────────────
+export interface Goal {
+  targetUnits: number;  // net units to reach, relative to startDate
+  deadline: string;     // ISO date
+  startDate: string;    // ISO date — progress is measured from here, not all-time
+  note?: string;
+  createdAt: string;
 }

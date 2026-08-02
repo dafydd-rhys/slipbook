@@ -33,6 +33,10 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
+# local JSON fallback storage (used when Redis env vars aren't set) —
+# contains your own bet data, never something to commit
+/data/bets.json
+
 # vercel
 .vercel
 

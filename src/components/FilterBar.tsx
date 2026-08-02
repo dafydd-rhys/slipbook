@@ -1,49 +1,20 @@
 'use client';
 
 import { useRef, useState, useEffect, useCallback } from 'react';
-import { Bet, BetStats, FilterType, OddsFormat } from '@/lib/types';
+import { BetStats, FilterType, OddsFormat } from '@/lib/types';
 import { formatOdds } from '@/lib/odds';
-import { toUnits } from '@/lib/units';
+import { SITE_NAME } from '@/lib/config';
+
+export { applyFilter, computeStats } from '@/lib/stats';
 
 const FILTERS: { key: FilterType; label: string }[] = [
   { key: 'last7',  label: 'Last 7 Days' },
   { key: 'last30', label: 'Last 30 Days' },
+  { key: 'last60', label: 'Last 60 Days' },
   { key: 'last90', label: 'Last 90 Days' },
   { key: 'year',   label: '1 Year' },
   { key: 'all',    label: 'All Time' },
 ];
-
-export function applyFilter(bets: Bet[], filter: FilterType): Bet[] {
-  const now = new Date();
-  const last7  = new Date(now); last7.setDate(now.getDate() - 7);
-  const last30 = new Date(now); last30.setDate(now.getDate() - 30);
-  const last90 = new Date(now); last90.setDate(now.getDate() - 90);
-  const lastYear = new Date(now); lastYear.setDate(now.getDate() - 365);
-
-  let out = [...bets];
-  switch (filter) {
-    case 'last7':  out = out.filter(b => new Date(b.date) >= last7); break;
-    case 'last30': out = out.filter(b => new Date(b.date) >= last30); break;
-    case 'last90': out = out.filter(b => new Date(b.date) >= last90); break;
-    case 'year':   out = out.filter(b => new Date(b.date) >= lastYear); break;
-    case 'all':    break;
-  }
-  out.sort((a, b) => +new Date(b.date) - +new Date(a.date));
-  return out;
-}
-
-export function computeStats(bets: Bet[]): BetStats {
-  const settled = bets.filter(b => b.result !== 'pending');
-  const pending  = bets.filter(b => b.result === 'pending').length;
-  const totalStaked  = settled.reduce((s, b) => s + b.stake, 0);
-  const totalReturns = settled.reduce((s, b) => s + (b.returns ?? 0), 0);
-  const pnl      = totalReturns - totalStaked;
-  const roi      = totalStaked > 0 ? (pnl / totalStaked) * 100 : 0;
-  const units    = toUnits(pnl);
-  const stakedUnits = toUnits(totalStaked);
-  const avgOdds  = bets.length > 0 ? bets.reduce((s, b) => s + b.totalOdds, 0) / bets.length : 0;
-  return { totalBets: bets.length, pending, totalStaked, totalReturns, pnl, roi, units, stakedUnits, avgOdds };
-}
 
 interface Props {
   active: FilterType;
@@ -54,13 +25,35 @@ interface Props {
 
 export default function FilterBar({ active, onChange, stats, fmt }: Props) {
   const scrollRef  = useRef<HTMLDivElement>(null);
+  const shareCardRef = useRef<HTMLDivElement>(null);
   const dragging   = useRef(false);
   const dragStartX = useRef(0);
   const dragScrollL = useRef(0);
   const [canL, setCanL] = useState(false);
   const [canR, setCanR] = useState(true);
+  const [sharing, setSharing] = useState(false);
   const pnlPos   = stats.pnl >= 0;
   const unitsPos = stats.units >= 0;
+  const periodLabel = FILTERS.find(f => f.key === active)?.label ?? active;
+
+  async function handleShareStats() {
+    if (sharing || !shareCardRef.current) return;
+    setSharing(true);
+    try {
+      const { toPng } = await import('html-to-image');
+      const dataUrl = await toPng(shareCardRef.current, { pixelRatio: 2 });
+      const a = document.createElement('a');
+      a.href = dataUrl;
+      a.download = `${SITE_NAME.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-stats-${active}.png`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } catch (err) {
+      console.error('Failed to export stats image', err);
+    } finally {
+      setSharing(false);
+    }
+  }
 
   function checkArrows() {
     const el = scrollRef.current;
@@ -114,9 +107,9 @@ export default function FilterBar({ active, onChange, stats, fmt }: Props) {
       aria-label={`Scroll ${dir}`}
       style={{
         flexShrink: 0, width: 28, height: 28, borderRadius: '50%',
-        border: `1px solid ${can ? '#2a2a52' : '#141428'}`,
+        border: `1px solid ${can ? 'var(--border)' : 'var(--border-soft)'}`,
         background: 'transparent',
-        color: can ? '#64748b' : '#1e1e3e',
+        color: can ? 'var(--text-muted)' : 'var(--border)',
         cursor: can ? 'pointer' : 'default',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         transition: 'all 0.15s', pointerEvents: can ? 'auto' : 'none',
@@ -132,11 +125,11 @@ export default function FilterBar({ active, onChange, stats, fmt }: Props) {
   );
 
   const statItems = [
-    { label: 'PICKS',          value: String(stats.totalBets),                           color: '#94a3b8' },
-    { label: 'SETTLED STAKES', value: `${stats.stakedUnits.toFixed(2)}u`,                 color: '#94a3b8' },
-    { label: 'NET UNITS',      value: `${unitsPos ? '+' : ''}${stats.units.toFixed(2)}u`, color: unitsPos ? '#10b981' : '#ef4444' },
-    { label: 'ROI',            value: `${pnlPos ? '+' : ''}${stats.roi.toFixed(1)}%`,     color: pnlPos ? '#10b981' : '#ef4444' },
-    { label: 'AVG ODDS',       value: `@ ${formatOdds(stats.avgOdds, fmt)}`,              color: '#a78bfa' },
+    { label: 'PICKS',          value: String(stats.totalBets),                           color: 'var(--text-muted)' },
+    { label: 'SETTLED STAKES', value: `${stats.stakedUnits.toFixed(2)}u`,                 color: 'var(--text-muted)' },
+    { label: 'NET UNITS',      value: `${unitsPos ? '+' : ''}${stats.units.toFixed(2)}u`, color: unitsPos ? 'var(--won)' : 'var(--lost)' },
+    { label: 'ROI',            value: `${pnlPos ? '+' : ''}${stats.roi.toFixed(1)}%`,     color: pnlPos ? 'var(--won)' : 'var(--lost)' },
+    { label: 'AVG ODDS',       value: `@ ${formatOdds(stats.avgOdds, fmt)}`,               color: 'var(--accent)' },
   ];
 
   return (
@@ -162,16 +155,17 @@ export default function FilterBar({ active, onChange, stats, fmt }: Props) {
                 onClick={() => onChange(f.key)}
                 style={{
                   flexShrink: 0,
-                  background: isActive ? '#7c3aed' : 'transparent',
-                  border: `1px solid ${isActive ? '#7c3aed' : '#2a2a52'}`,
+                  background: isActive ? 'var(--accent)' : 'transparent',
+                  border: `1px solid ${isActive ? 'var(--accent)' : 'var(--border)'}`,
                   borderRadius: 20,
-                  color: isActive ? '#fff' : '#64748b',
-                  fontSize: 12, fontWeight: isActive ? 700 : 400,
-                  padding: '5px 14px', cursor: 'pointer',
+                  color: isActive ? 'var(--accent-contrast)' : 'var(--text-muted)',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 11, fontWeight: isActive ? 700 : 600, letterSpacing: '0.03em',
+                  padding: '6px 14px', cursor: 'pointer',
                   whiteSpace: 'nowrap', transition: 'all 0.15s',
                 }}
-                onMouseEnter={e => { if (!isActive) e.currentTarget.style.color = '#a78bfa'; }}
-                onMouseLeave={e => { if (!isActive) e.currentTarget.style.color = '#64748b'; }}
+                onMouseEnter={e => { if (!isActive) e.currentTarget.style.color = 'var(--accent)'; }}
+                onMouseLeave={e => { if (!isActive) e.currentTarget.style.color = 'var(--text-muted)'; }}
               >
                 {f.label}
               </button>
@@ -179,24 +173,80 @@ export default function FilterBar({ active, onChange, stats, fmt }: Props) {
           })}
         </div>
         {arrow('right', canR)}
+        <button
+          onClick={handleShareStats}
+          disabled={sharing}
+          aria-label="Share these stats as an image"
+          title="Share these stats as an image"
+          style={{
+            flexShrink: 0, width: 28, height: 28, borderRadius: '50%',
+            border: '1px solid var(--border)', background: 'transparent',
+            color: 'var(--text-muted)', cursor: sharing ? 'wait' : 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          {sharing ? (
+            <span aria-hidden style={{
+              width: 12, height: 12, borderRadius: '50%',
+              border: '2px solid var(--border)', borderTopColor: 'var(--accent)',
+              animation: 'spin 0.8s linear infinite', display: 'block',
+            }} />
+          ) : (
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+              <path d="M8 10.5V2M8 2L5 5M8 2l3 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M3 9.5V12.5a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V9.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          )}
+        </button>
       </div>
 
       {/* ── Stats row ── */}
-      <div className="stats-grid" style={{ marginTop: 16, marginBottom: 4, paddingBottom: 16, borderBottom: '1px solid #1a1a38' }}>
+      <div className="stats-grid" style={{ marginTop: 16, marginBottom: 4, paddingBottom: 16, borderBottom: '1px solid var(--border)' }}>
         {statItems.map((item, i) => (
           <div
             key={i}
             className="stats-item"
-            style={{ borderRight: i < statItems.length - 1 ? '1px solid #1a1a38' : undefined }}
+            style={{ borderRight: i < statItems.length - 1 ? '1px solid var(--border)' : undefined }}
           >
-            <div style={{ fontSize: 16, fontWeight: 700, color: item.color, lineHeight: 1.2, letterSpacing: '-0.02em' }}>
+            <div className="tabular" style={{ fontFamily: 'var(--font-mono)', fontSize: 16, fontWeight: 600, color: item.color, lineHeight: 1.2, letterSpacing: '-0.01em' }}>
               {item.value}
             </div>
-            <div style={{ fontSize: 9, color: '#2a2a52', fontWeight: 700, letterSpacing: '0.06em', marginTop: 3 }}>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-faint)', fontWeight: 600, letterSpacing: '0.06em', marginTop: 3 }}>
               {item.label}
             </div>
           </div>
         ))}
+      </div>
+
+      {/* Off-screen card captured by handleShareStats — styled standalone
+          since the inline stats row above assumes surrounding page chrome. */}
+      <div style={{ position: 'fixed', top: 0, left: -9999, pointerEvents: 'none' }}>
+        <div ref={shareCardRef} style={{
+          width: 420, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 18,
+          padding: '28px 26px', fontFamily: 'var(--font-body)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 4 }}>
+            <span style={{ fontFamily: 'var(--font-display)', textTransform: 'uppercase', fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>
+              {SITE_NAME}
+            </span>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-faint)', fontWeight: 700, letterSpacing: '0.08em' }}>
+              {periodLabel.toUpperCase()}
+            </span>
+          </div>
+          <div style={{ height: 1, background: 'var(--border)', margin: '16px 0 20px' }} />
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }}>
+            {statItems.map((item, i) => (
+              <div key={i}>
+                <div className="tabular" style={{ fontFamily: 'var(--font-mono)', fontSize: 22, fontWeight: 700, color: item.color, letterSpacing: '-0.01em' }}>
+                  {item.value}
+                </div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9.5, color: 'var(--text-faint)', fontWeight: 600, letterSpacing: '0.06em', marginTop: 4 }}>
+                  {item.label}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
 
     </div>

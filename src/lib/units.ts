@@ -1,4 +1,4 @@
-export const UNIT_SIZE = 100; // 1 unit = £100 (fixed, stored in GBP) — never shown publicly
+import { UNIT_SIZE } from './config';
 
 export function toUnits(amountGBP: number): number {
   return amountGBP / UNIT_SIZE;

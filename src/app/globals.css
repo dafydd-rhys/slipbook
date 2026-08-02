@@ -1,18 +1,94 @@
 @import "tailwindcss";
 
+/* ── Design tokens — "The Settlement Desk" ──────────────────────────────
+   Ticket/betslip visual language: ink ground, brass accent, betting-
+   standard semantics for won/lost/pending/void kept separate from the
+   brand accent. See design proposal artifact for the full rationale. */
+:root {
+  --bg: #0b0d12;
+  --surface: #14171f;
+  --surface-2: #1b1f29;
+  --border: #262b36;
+  --border-soft: #1d212b;
+  --text: #f1eee7;
+  --text-muted: #8b8577;
+  --text-faint: #55504a;
+
+  --accent: #c6963c;
+  --accent-strong: #e4b662;
+  --accent-soft: rgba(198, 150, 60, 0.14);
+  --accent-contrast: #17110a;
+
+  --won: #3fa66b;
+  --won-soft: rgba(63, 166, 107, 0.14);
+  --lost: #d9524a;
+  --lost-soft: rgba(217, 82, 74, 0.13);
+  --pending: #dda13a;
+  --pending-soft: rgba(221, 161, 58, 0.14);
+  --void: #737a88;
+  --void-soft: rgba(115, 122, 136, 0.14);
+
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px -12px rgba(0, 0, 0, 0.5);
+
+  --font-display: var(--font-oswald), 'Arial Narrow', sans-serif;
+  --font-body: var(--font-plex-sans), system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, 'SF Mono', Consolas, monospace;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #faf8f3;
+    --surface: #ffffff;
+    --surface-2: #f3efe6;
+    --border: #e5dfd1;
+    --border-soft: #ede8dc;
+    --text: #1c1a16;
+    --text-muted: #6e6555;
+    --text-faint: #a79c89;
+    --accent: #8c6420;
+    --accent-strong: #6e4f19;
+    --accent-soft: rgba(140, 100, 32, 0.1);
+    --accent-contrast: #fffbf3;
+    --won: #1f8a52;
+    --won-soft: rgba(31, 138, 82, 0.1);
+    --lost: #c13b33;
+    --lost-soft: rgba(193, 59, 51, 0.08);
+    --pending: #b97a1a;
+    --pending-soft: rgba(185, 122, 26, 0.1);
+    --void: #6b7280;
+    --void-soft: rgba(107, 114, 128, 0.1);
+    --shadow: 0 1px 2px rgba(28, 26, 22, 0.06), 0 8px 20px -14px rgba(28, 26, 22, 0.18);
+  }
+}
+:root[data-theme='dark'] {
+  --bg: #0b0d12; --surface: #14171f; --surface-2: #1b1f29; --border: #262b36; --border-soft: #1d212b;
+  --text: #f1eee7; --text-muted: #8b8577; --text-faint: #55504a;
+  --accent: #c6963c; --accent-strong: #e4b662; --accent-soft: rgba(198, 150, 60, 0.14); --accent-contrast: #17110a;
+  --won: #3fa66b; --won-soft: rgba(63, 166, 107, 0.14);
+  --lost: #d9524a; --lost-soft: rgba(217, 82, 74, 0.13);
+  --pending: #dda13a; --pending-soft: rgba(221, 161, 58, 0.14);
+  --void: #737a88; --void-soft: rgba(115, 122, 136, 0.14);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px -12px rgba(0, 0, 0, 0.5);
+}
+:root[data-theme='light'] {
+  --bg: #faf8f3; --surface: #ffffff; --surface-2: #f3efe6; --border: #e5dfd1; --border-soft: #ede8dc;
+  --text: #1c1a16; --text-muted: #6e6555; --text-faint: #a79c89;
+  --accent: #8c6420; --accent-strong: #6e4f19; --accent-soft: rgba(140, 100, 32, 0.1); --accent-contrast: #fffbf3;
+  --won: #1f8a52; --won-soft: rgba(31, 138, 82, 0.1);
+  --lost: #c13b33; --lost-soft: rgba(193, 59, 51, 0.08);
+  --pending: #b97a1a; --pending-soft: rgba(185, 122, 26, 0.1);
+  --void: #6b7280; --void-soft: rgba(107, 114, 128, 0.1);
+  --shadow: 0 1px 2px rgba(28, 26, 22, 0.06), 0 8px 20px -14px rgba(28, 26, 22, 0.18);
+}
+
 @theme {
-  --color-pitch: #0a0a14;
-  --color-strip: #12122a;
-  --color-card: #16162e;
-  --color-elevated: #1e1e3e;
-  --color-rail: #2a2a52;
-  --color-accent: #8b5cf6;
-  --color-accent-light: #a78bfa;
-  --color-accent-dark: #6d28d9;
-  --color-won: #10b981;
-  --color-lost: #ef4444;
-  --color-pending: #f59e0b;
-  --color-void: #64748b;
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-accent: var(--accent);
+  --color-won: var(--won);
+  --color-lost: var(--lost);
+  --color-pending: var(--pending);
+  --color-void: var(--void);
 }
 
 * {
@@ -26,16 +102,28 @@ html, body {
 }
 
 body {
-  background-color: #0a0a14;
-  color: #f1f5f9;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
 }
 
 /* ── Scrollbars ── */
 ::-webkit-scrollbar { width: 4px; height: 4px; }
-::-webkit-scrollbar-track { background: #12122a; }
-::-webkit-scrollbar-thumb { background: #2a2a52; border-radius: 2px; }
+::-webkit-scrollbar-track { background: var(--surface); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 
 /* ── Remove number input spinners ── */
 input[type="number"]::-webkit-outer-spin-button,
@@ -53,9 +141,9 @@ input[type="checkbox"] {
   -webkit-appearance: none;
   width: 16px;
   height: 16px;
-  border: 1.5px solid #2a2a52;
+  border: 1.5px solid var(--border);
   border-radius: 4px;
-  background: #0a0a14;
+  background: var(--bg);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -66,21 +154,31 @@ input[type="checkbox"] {
   vertical-align: middle;
 }
 input[type="checkbox"]:hover {
-  border-color: #8b5cf6;
+  border-color: var(--accent);
 }
 input[type="checkbox"]:checked {
-  background: #7c3aed;
-  border-color: #7c3aed;
+  background: var(--accent);
+  border-color: var(--accent);
 }
 input[type="checkbox"]:checked::after {
   content: '';
   position: absolute;
   width: 4px;
   height: 7px;
-  border: 2px solid #fff;
+  border: 2px solid var(--accent-contrast);
   border-top: none;
   border-left: none;
   transform: rotate(45deg) translate(-1px, -1px);
+}
+
+/* ── Focus visibility ── */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 /* ── Animations ── */
@@ -91,6 +189,56 @@ input[type="checkbox"]:checked::after {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.35; }
 }
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes scan-sweep {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(220%); }
+}
+
+/* ── Page / panel transitions ── */
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+.rise-in {
+  animation: rise-in 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.fade-in {
+  animation: fade-in 0.2s ease-out both;
+}
+/* Staggered list reveal — apply .stagger-in to each item, set --i for order */
+.stagger-in {
+  animation: rise-in 0.32s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: calc(var(--i, 0) * 35ms);
+}
+
+/* ── Ticket perforation (bet-card stub divider) ── */
+.perforation {
+  position: relative;
+  height: 1px;
+  margin: 0 14px;
+  border-top: 1.5px dashed var(--border);
+}
+.perforation::before,
+.perforation::after {
+  content: '';
+  position: absolute;
+  top: -6px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+}
+.perforation::before { left: -20px; }
+.perforation::after { right: -20px; }
 
 /* ── Hide scrollbar utility ── */
 .no-scrollbar::-webkit-scrollbar { display: none; }

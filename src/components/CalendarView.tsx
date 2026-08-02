@@ -9,14 +9,6 @@ const MONTHS = [
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
-const MIN_YEAR = 2026;
-
-// May 2026 and everything before it predates this app's tracking — folded into one
-// "all-time" blob carrying prior lifetime profit, rather than empty/missing tiles.
-const PRE_TRACKING_YEAR = 2026;
-const PRE_TRACKING_END_MONTH = 4; // blob covers Jan(0)..May(4) inclusive
-const PRE_TRACKING_PROFIT_GBP = 469;
-
 function monthPnl(bets: Bet[], year: number, month: number): number {
   return bets.reduce((sum, b) => {
     if (b.result === 'pending') return sum;
@@ -26,65 +18,72 @@ function monthPnl(bets: Bet[], year: number, month: number): number {
   }, 0);
 }
 
-function tileColors(pnl: number) {
-  return {
-    color: pnl > 0 ? '#10b981' : pnl < 0 ? '#ef4444' : '#64748b',
-    bg: pnl > 0 ? 'rgba(16,185,129,0.10)' : pnl < 0 ? 'rgba(239,68,68,0.08)' : 'rgba(100,116,139,0.08)',
-    border: pnl > 0 ? 'rgba(16,185,129,0.35)' : pnl < 0 ? 'rgba(239,68,68,0.3)' : 'rgba(100,116,139,0.25)',
-  };
+function tileColor(pnl: number): string {
+  return pnl > 0 ? 'var(--won)' : pnl < 0 ? 'var(--lost)' : 'var(--text-faint)';
 }
 
-function Tile({ label, pnl, sublabel, style }: {
-  label: string; pnl: number; sublabel?: string; style?: React.CSSProperties;
-}) {
-  const { color, bg, border } = tileColors(pnl);
+function Arrow({ pnl }: { pnl: number }) {
+  if (pnl === 0) return null;
+  const up = pnl > 0;
+  return (
+    <span style={{
+      width: 0, height: 0, display: 'inline-block', flexShrink: 0,
+      borderLeft: '4px solid transparent', borderRight: '4px solid transparent',
+      borderBottom: up ? '6px solid var(--won)' : 'none',
+      borderTop: up ? 'none' : '6px solid var(--lost)',
+    }} />
+  );
+}
+
+function Tile({ label, pnl }: { label: string; pnl: number }) {
+  const color = tileColor(pnl);
   return (
     <div style={{
-      background: bg, border: `1px solid ${border}`, borderRadius: 12,
-      padding: '14px 10px', textAlign: 'center',
+      background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 11,
+      padding: '15px 10px', textAlign: 'center',
       display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-      ...style,
     }}>
-      <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', letterSpacing: '0.04em' }}>
-        {label}
+      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600, color: 'var(--text-faint)', letterSpacing: '0.08em' }}>
+        {label.toUpperCase()}
       </div>
-      <div style={{ fontSize: 15, fontWeight: 700, color, marginTop: 8 }}>
+      <div className="tabular" style={{ fontFamily: 'var(--font-mono)', fontSize: 15, fontWeight: 600, color, marginTop: 9, display: 'flex', alignItems: 'center', gap: 4 }}>
+        <Arrow pnl={pnl} />
         {pnl > 0 ? '+' : ''}{formatUnits(pnl)}
       </div>
-      {sublabel && (
-        <div style={{ fontSize: 9, color: '#475569', fontStyle: 'italic', marginTop: 4 }}>
-          {sublabel}
-        </div>
-      )}
     </div>
   );
 }
 
 interface Props {
   bets: Bet[];
-  onBack: () => void;
+  onBack?: () => void;
 }
 
 export default function CalendarView({ bets, onBack }: Props) {
   const maxYear = new Date().getFullYear();
+  const minYear = bets.length > 0
+    ? Math.min(maxYear, ...bets.map(b => new Date(b.date).getFullYear()))
+    : maxYear;
   const [year, setYear] = useState(maxYear);
-  const canPrev = year > MIN_YEAR;
+  const canPrev = year > minYear;
   const canNext = year < maxYear;
-  const isBlobYear = year === PRE_TRACKING_YEAR;
 
   return (
-    <div style={{ maxWidth: 720, margin: '0 auto', padding: '20px 20px 56px' }}>
-      {/* Year nav + back to day view */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-        <button
-          onClick={onBack}
-          style={{
-            background: 'transparent', border: '1px solid #2a2a52', borderRadius: 20,
-            color: '#a78bfa', fontSize: 12, fontWeight: 700, padding: '5px 14px', cursor: 'pointer',
-          }}
-        >
-          ← Day View
-        </button>
+    <div style={{ maxWidth: 720, margin: '0 auto', padding: onBack ? '20px 20px 56px' : '4px 0 8px' }}>
+      {/* Year nav + optional back to day view */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: onBack ? 'space-between' : 'center', marginBottom: 20 }}>
+        {onBack && (
+          <button
+            onClick={onBack}
+            style={{
+              background: 'transparent', border: '1px solid var(--border)', borderRadius: 20,
+              color: 'var(--accent)', fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700,
+              letterSpacing: '0.04em', padding: '6px 14px', cursor: 'pointer',
+            }}
+          >
+            ← Day View
+          </button>
+        )}
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
           <button
@@ -92,15 +91,15 @@ export default function CalendarView({ bets, onBack }: Props) {
             aria-label="Previous year"
             disabled={!canPrev}
             style={{
-              background: 'transparent', border: `1px solid ${canPrev ? '#2a2a52' : '#141428'}`, borderRadius: '50%',
-              width: 28, height: 28, color: canPrev ? '#64748b' : '#1e1e3e',
+              background: 'var(--surface)', border: `1px solid ${canPrev ? 'var(--border)' : 'var(--border-soft)'}`, borderRadius: 8,
+              width: 28, height: 28, color: canPrev ? 'var(--text-muted)' : 'var(--border)',
               cursor: canPrev ? 'pointer' : 'default',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}
           >
             ‹
           </button>
-          <span style={{ fontSize: 15, fontWeight: 700, color: '#f1f5f9', minWidth: 50, textAlign: 'center' }}>
+          <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 18, color: 'var(--text)', minWidth: 58, textAlign: 'center' }}>
             {year}
           </span>
           <button
@@ -108,8 +107,8 @@ export default function CalendarView({ bets, onBack }: Props) {
             aria-label="Next year"
             disabled={!canNext}
             style={{
-              background: 'transparent', border: `1px solid ${canNext ? '#2a2a52' : '#141428'}`, borderRadius: '50%',
-              width: 28, height: 28, color: canNext ? '#64748b' : '#1e1e3e',
+              background: 'var(--surface)', border: `1px solid ${canNext ? 'var(--border)' : 'var(--border-soft)'}`, borderRadius: 8,
+              width: 28, height: 28, color: canNext ? 'var(--text-muted)' : 'var(--border)',
               cursor: canNext ? 'pointer' : 'default',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}
@@ -119,58 +118,11 @@ export default function CalendarView({ bets, onBack }: Props) {
         </div>
       </div>
 
-      {/* 3 x 4 month grid. In the blob year, Jan–May fold into an L-shaped
-          block: one piece spans the full first row, a second piece spans
-          just the first 2 columns of the second row. The second piece is
-          pulled up by `gap` (via a negative margin, confined to its own
-          2 columns) so it merges seamlessly with the row above it — June,
-          sitting in the remaining column-3/row-2 cell, is untouched by that
-          margin and stays a normal Tile with the usual grid gap on all sides. */}
+      {/* 3 x 4 month grid, every year rendered the same way. */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
-        {isBlobYear ? (
-          <>
-            <div style={{
-              gridColumn: '1 / 4', gridRow: '1 / 2',
-              background: tileColors(PRE_TRACKING_PROFIT_GBP).bg,
-              borderTop: `1px solid ${tileColors(PRE_TRACKING_PROFIT_GBP).border}`,
-              borderLeft: `1px solid ${tileColors(PRE_TRACKING_PROFIT_GBP).border}`,
-              borderRight: `1px solid ${tileColors(PRE_TRACKING_PROFIT_GBP).border}`,
-              borderTopLeftRadius: 12, borderTopRightRadius: 12,
-              borderBottomLeftRadius: 0, borderBottomRightRadius: 12,
-              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-              padding: '14px 10px', textAlign: 'center',
-            }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: '#94a3b8', letterSpacing: '0.05em' }}>
-                MAY & BEFORE
-              </div>
-              <div style={{ fontSize: 26, fontWeight: 800, color: tileColors(PRE_TRACKING_PROFIT_GBP).color, marginTop: 10 }}>
-                +{formatUnits(PRE_TRACKING_PROFIT_GBP)}
-              </div>
-              <div style={{ fontSize: 11, color: '#475569', fontStyle: 'italic', marginTop: 6 }}>
-                All-time
-              </div>
-            </div>
-            <div style={{
-              gridColumn: '1 / 3', gridRow: '2 / 3', marginTop: -10,
-              background: tileColors(PRE_TRACKING_PROFIT_GBP).bg,
-              borderLeft: `1px solid ${tileColors(PRE_TRACKING_PROFIT_GBP).border}`,
-              borderRight: `1px solid ${tileColors(PRE_TRACKING_PROFIT_GBP).border}`,
-              borderBottom: `1px solid ${tileColors(PRE_TRACKING_PROFIT_GBP).border}`,
-              borderTopLeftRadius: 0, borderTopRightRadius: 0,
-              borderBottomLeftRadius: 12, borderBottomRightRadius: 12,
-            }} />
-            <Tile
-              label={MONTHS[PRE_TRACKING_END_MONTH + 1]}
-              pnl={monthPnl(bets, year, PRE_TRACKING_END_MONTH + 1)}
-            />
-            {MONTHS.slice(PRE_TRACKING_END_MONTH + 2).map((name, idx) => {
-              const i = idx + PRE_TRACKING_END_MONTH + 2;
-              return <Tile key={name} label={name} pnl={monthPnl(bets, year, i)} />;
-            })}
-          </>
-        ) : (
-          MONTHS.map((name, i) => <Tile key={name} label={name} pnl={monthPnl(bets, year, i)} />)
-        )}
+        {MONTHS.map((name, i) => (
+          <Tile key={name} label={name} pnl={monthPnl(bets, year, i)} />
+        ))}
       </div>
     </div>
   );

@@ -1,13 +1,26 @@
+import Link from 'next/link';
+import { SITE_NAME } from '@/lib/config';
+
 export default function Footer() {
   return (
-    <footer style={{ borderTop: '1px solid #1a1a38', marginTop: 'auto' }}>
-      <div style={{ maxWidth: 720, margin: '0 auto', padding: '12px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span style={{ fontWeight: 800, fontSize: 12, letterSpacing: '-0.01em', color: '#2a2a52' }}>
-          strz<span style={{ color: '#3b0764' }}>Slipz</span>
+    <footer style={{ borderTop: '1px solid var(--border)', marginTop: 'auto' }}>
+      <div style={{ maxWidth: 900, margin: '0 auto', padding: '12px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+        <span style={{
+          fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 12, letterSpacing: '0.02em',
+          textTransform: 'uppercase', color: 'var(--text-faint)',
+        }}>
+          {SITE_NAME}
         </span>
-        <span style={{ fontSize: 11, color: '#1e1e3e' }}>
-          © {new Date().getFullYear()}
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <Link href="/knowledge-base" style={{
+            textDecoration: 'none', fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--text-faint)',
+          }}>
+            Knowledge Base
+          </Link>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--text-faint)' }}>
+            © {new Date().getFullYear()}
+          </span>
+        </div>
       </div>
     </footer>
   );

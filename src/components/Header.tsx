@@ -2,74 +2,87 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { SITE_NAME } from '@/lib/config';
+import ThemeToggle from './ThemeToggle';
 
-export const CONTENT_WIDTH = 720;
+export const CONTENT_WIDTH = 900;
+
+const NAV_LINKS = [
+  { href: '/', label: 'Tracker' },
+  { href: '/insights', label: 'Insights' },
+  { href: '/bankroll', label: 'Bankroll' },
+  { href: '/knowledge-base', label: 'Knowledge Base' },
+];
 
 export default function Header() {
   const pathname = usePathname();
-  const onAdmin = pathname === '/admin';
+  const onAdmin = pathname.startsWith('/admin');
 
   return (
-    <header style={{ background: '#0d0d20', borderBottom: '1px solid #1a1a38' }} className="sticky top-0 z-50">
-      <div
-        style={{
-          maxWidth: CONTENT_WIDTH,
-          margin: '0 auto',
-          padding: '0 20px',
-          height: 64,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-        }}
-      >
-        <Link href="/" style={{ textDecoration: 'none' }}>
-          <div
-            style={{
-              background: 'linear-gradient(135deg, #4c1d95 0%, #1e1b4b 100%)',
-              border: '1px solid #6d28d9',
-              borderRadius: 8,
-              padding: '7px 14px',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 4,
-            }}
-          >
-            <span style={{ color: '#fff', fontWeight: 900, fontSize: 17, letterSpacing: '-0.03em', lineHeight: 1 }}>
-              strz
-            </span>
-            <span style={{ color: '#a78bfa', fontWeight: 900, fontSize: 17, letterSpacing: '-0.03em', lineHeight: 1 }}>
-              Slipz
-            </span>
-          </div>
-        </Link>
-
-        {!onAdmin && (
-          <Link href="/admin" style={{ textDecoration: 'none' }}>
-            <div
+    <header style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', position: 'sticky', top: 0, zIndex: 50 }}>
+      <div style={{ maxWidth: CONTENT_WIDTH, margin: '0 auto', padding: '0 20px' }}>
+        <div style={{ height: 64, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+          <Link href="/" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 9, flexShrink: 0 }}>
+            <span
               style={{
-                background: 'transparent',
-                border: '1px solid #1e1e3e',
-                borderRadius: 7,
-                color: '#475569',
-                fontSize: 11,
-                fontWeight: 700,
-                letterSpacing: '0.1em',
-                padding: '6px 13px',
-                cursor: 'pointer',
-                transition: 'all 0.15s',
-              }}
-              onMouseEnter={e => {
-                (e.currentTarget as HTMLElement).style.borderColor = '#6d28d9';
-                (e.currentTarget as HTMLElement).style.color = '#a78bfa';
-              }}
-              onMouseLeave={e => {
-                (e.currentTarget as HTMLElement).style.borderColor = '#1e1e3e';
-                (e.currentTarget as HTMLElement).style.color = '#475569';
+                width: 30, height: 30, borderRadius: 7, flexShrink: 0,
+                background: 'linear-gradient(155deg, var(--accent) 0%, var(--accent-strong) 100%)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: 'var(--accent-contrast)', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 15,
               }}
             >
-              ADMIN
-            </div>
+              {SITE_NAME.charAt(0).toUpperCase()}
+            </span>
+            <span style={{
+              color: 'var(--text)', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 18,
+              textTransform: 'uppercase', letterSpacing: '0.01em', lineHeight: 1, whiteSpace: 'nowrap',
+            }}>
+              {SITE_NAME}
+            </span>
           </Link>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+            <ThemeToggle />
+            {!onAdmin && (
+              <Link href="/admin" style={{ textDecoration: 'none' }}>
+                <div
+                  style={{
+                    background: 'transparent', border: '1px solid var(--border)', borderRadius: 7,
+                    color: 'var(--text-faint)', fontFamily: 'var(--font-mono)', fontSize: 10.5, fontWeight: 600,
+                    letterSpacing: '0.1em', padding: '6px 13px', cursor: 'pointer', transition: 'all 0.15s',
+                    textTransform: 'uppercase', whiteSpace: 'nowrap',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--accent)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-faint)'; }}
+                >
+                  Admin
+                </div>
+              </Link>
+            )}
+          </div>
+        </div>
+
+        {!onAdmin && (
+          <nav className="no-scrollbar" style={{ display: 'flex', gap: 4, overflowX: 'auto', paddingBottom: 1 }}>
+            {NAV_LINKS.map(link => {
+              const active = link.href === '/' ? pathname === '/' : pathname.startsWith(link.href);
+              return (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  style={{
+                    textDecoration: 'none', flexShrink: 0,
+                    fontFamily: 'var(--font-mono)', fontSize: 11.5, fontWeight: 600, letterSpacing: '0.04em',
+                    color: active ? 'var(--accent)' : 'var(--text-faint)',
+                    padding: '10px 12px 11px', borderBottom: `2px solid ${active ? 'var(--accent)' : 'transparent'}`,
+                    whiteSpace: 'nowrap', transition: 'color 0.15s, border-color 0.15s',
+                  }}
+                >
+                  {link.label.toUpperCase()}
+                </Link>
+              );
+            })}
+          </nav>
         )}
       </div>
     </header>
