@@ -2,11 +2,9 @@
 
 A single-user betting tracker built with Next.js. Log singles, accumulators, bet builders and each-ways, track results, and see your calendar/stats view — with a simple PIN-gated admin area for adding and editing bets.
 
-This repo is set up so you can fork/clone it and have your own instance running in a few minutes, with your own branding, your own admin PIN, and your own data store.
+This repo is set up so you can fork/clone it and have your own instance running in a few minutes, with your own branding, your own admin PIN, and your own data store. It's built for one person tracking their own bets, not a multi-tenant SaaS — no accounts, no signup flow, just you and your admin PIN.
 
 ![Tracker](docs/screenshots/tracker.png)
-![Insights](docs/screenshots/insights.png)
-![Admin — Add Bet](docs/screenshots/admin-add-bet.png)
 
 ## Contents
 
@@ -19,6 +17,7 @@ This repo is set up so you can fork/clone it and have your own instance running 
 - [AI features (optional)](#ai-features-optional)
 - [Making it your own](#making-it-your-own)
 - [Deploying (Vercel)](#deploying-vercel)
+- [Contributing](#contributing)
 - [Project structure](#project-structure)
 - [Scripts](#scripts)
 
@@ -40,6 +39,8 @@ This repo is set up so you can fork/clone it and have your own instance running 
 
 For a full walkthrough of every feature (bet types, odds formats, units, insights, sharing, imports, and more), see the in-app **Knowledge Base** at `/knowledge-base` once it's running — this README covers setup and project layout.
 
+![Insights](docs/screenshots/insights.png)
+
 ## Tech stack
 
 - [Next.js](https://nextjs.org) (App Router) + React 19 + TypeScript
@@ -48,6 +49,8 @@ For a full walkthrough of every feature (bet types, odds formats, units, insight
 - [Anthropic API](https://console.anthropic.com) for the optional AI features (screenshot/text import, settlement suggestions, performance summaries)
 
 ## Getting started
+
+Requires Node.js 20 or later.
 
 ### 1. Clone and install
 
@@ -78,6 +81,8 @@ cp .env.example .env.local
 
 \* If the Redis variables are left unset, the app automatically falls back to storing bets in a local `data/bets.json` file. This is great for trying the app out locally, but **won't work on serverless hosts like Vercel** (their filesystem is read-only/ephemeral in production), so set up Redis before deploying. `data/*.json` is gitignored, so a fresh clone always starts with zero bets — nobody's data ships with the repo, and yours won't end up in it either.
 
+**Deploying this?** `.env.local` only affects your own machine — see [Deploying (Vercel)](#deploying-vercel) below to set the same variables on your host.
+
 #### Setting up Upstash Redis (free)
 
 1. Create a free account at [upstash.com](https://upstash.com) and create a new Redis database.
@@ -95,6 +100,8 @@ npm run dev
 Visit [http://localhost:3000](http://localhost:3000) for the tracker and [http://localhost:3000/admin](http://localhost:3000/admin) to add bets (enter the PIN you set in `ADMIN_PIN`).
 
 You can sanity-check your storage connection at [http://localhost:3000/api/status](http://localhost:3000/api/status) — it reports which storage backend is active and how many bets are stored.
+
+![Admin — Add Bet](docs/screenshots/admin-add-bet.png)
 
 ## AI features (optional)
 
@@ -118,8 +125,21 @@ All of these are powered by a single `ANTHROPIC_API_KEY` — get one at [console
 ## Deploying (Vercel)
 
 1. Push your fork to GitHub and [import it into Vercel](https://vercel.com/new).
-2. In the Vercel project's **Environment Variables** settings, add the same variables from `.env.local` (at minimum `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` — the app won't persist data across deploys without them).
+2. In the Vercel project's **Environment Variables** settings, add the same variables from `.env.local` (at minimum `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` — the app won't persist data across deploys without them). `.env.local` never leaves your machine, so this step is required even if it already works locally.
 3. Deploy. `NEXT_PUBLIC_*` variables are baked in at build time, so re-deploy after changing them.
+
+## Contributing
+
+PRs and issues are welcome — this started as a personal project and turned into a template for anyone who wants their own instance, so if you find a bug, have an idea for a feature, or just want to clean something up, open an issue or send a PR.
+
+A few things that make reviewing faster:
+
+- Keep PRs focused — one feature or fix per PR is easier to review than a bundle of unrelated changes.
+- Run `npm run lint` and `npm run build` before opening a PR; both need to pass.
+- For anything bigger than a small fix (a new feature, a UI redesign, a refactor), open an issue first to talk through the approach — saves you writing code that goes in a different direction than the project needs.
+- Match the existing style: descriptive names over abbreviations, a short file-header comment explaining what the file does, and no comments that just restate what the code already says.
+
+No formal process beyond that — it's a small project, not a foundation.
 
 ## Project structure
 

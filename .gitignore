@@ -30,8 +30,10 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# env files — .env.example is the committed template, everything else
+# (.env, .env.local, .env.production, ...) holds real secrets and stays local
 .env*
+!.env.example
 
 # local JSON fallback storage (used when Redis env vars aren't set) —
 # contains your own bet data, never something to commit
