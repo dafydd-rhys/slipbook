@@ -43,6 +43,11 @@ export default function BreakdownsTab({ bets }: { bets: Bet[] }) {
   return (
     <div className="fade-in">
       <InsightsTabBar options={DIMENSIONS} value={dimension} onChange={setDimension} />
+      {dimension === 'Sport' && (
+        <p style={{ fontSize: 11, color: 'var(--text-faint)', marginBottom: 8 }}>
+          Bet counts include each leg of a multi-sport accumulator individually; P&amp;L is only attributed when every leg shares one sport — mixed-sport slips are grouped under &quot;Mixed&quot;.
+        </p>
+      )}
       <BreakdownTable {...breakdownFor(dimension, bets)} />
 
       <button

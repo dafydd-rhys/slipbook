@@ -15,6 +15,7 @@ This repo is set up so you can fork/clone it and have your own instance running 
   - [2. Configure your environment](#2-configure-your-environment)
   - [3. Run it](#3-run-it)
 - [AI features (optional)](#ai-features-optional)
+- [Optional integrations: CLV & notifications](#optional-integrations-clv--notifications)
 - [Making it your own](#making-it-your-own)
 - [Deploying (Vercel)](#deploying-vercel)
 - [Contributing](#contributing)
@@ -36,6 +37,7 @@ This repo is set up so you can fork/clone it and have your own instance running 
 - Data stored in [Upstash Redis](https://upstash.com) (free tier works fine), with a local-JSON fallback for zero-config local development
 - Configurable site name, description, currency, unit size, and admin PIN via environment variables — no code changes needed
 - Optional AI features (one shared API key, see below): screenshot import (drag, click, paste, or drop several at once) with an approximate cost shown per use, natural-language bet entry, reviewable settlement suggestions, and AI performance summaries
+- Optional, free integrations: Closing Line Value tracking against real market odds, and a push notification when a bet's event has passed and it's still unsettled — both run from one scheduled job, see below
 
 For a full walkthrough of every feature (bet types, odds formats, units, insights, sharing, imports, and more), see the in-app **Knowledge Base** at `/knowledge-base` once it's running — this README covers setup and project layout.
 
@@ -78,6 +80,9 @@ cp .env.example .env.local
 | `NEXT_PUBLIC_UNIT_SIZE` | No | Stake/returns currency per 1 "unit" in the public tracker view. Defaults to `100` |
 | `ADMIN_PIN` | Recommended | PIN to unlock `/admin`, checked server-side only. Defaults to `000000` if unset — change this |
 | `ANTHROPIC_API_KEY` | No | Enables all AI features (see below). Leave unset to disable them — everything else still works |
+| `CRON_SECRET` | No | Protects the scheduled-job endpoint powering CLV/notifications below. Leave unset to disable both |
+| `THE_ODDS_API_KEY` | No | Enables Closing Line Value tracking (see below). Leave unset to disable it |
+| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` / `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | No | Enable push notifications (see below). Leave unset to disable them |
 
 \* If the Redis variables are left unset, the app automatically falls back to storing bets in a local `data/bets.json` file. This is great for trying the app out locally, but **won't work on serverless hosts like Vercel** (their filesystem is read-only/ephemeral in production), so set up Redis before deploying. `data/*.json` is gitignored, so a fresh clone always starts with zero bets — nobody's data ships with the repo, and yours won't end up in it either.
 
@@ -111,6 +116,22 @@ All of these are powered by a single `ANTHROPIC_API_KEY` — get one at [console
 - **Describe it** (~$0.01–$0.02/description) — the text-entry alternative to a screenshot: type a plain-English sentence describing the bet and it's parsed the same way.
 - **Suggest Result** (~$0.03–$0.06/bet) — on a pending bet in the Manage tab, this searches the web for each leg's real-world outcome and proposes a result per leg with a confidence level. It's always a suggestion you review and confirm — nothing settles automatically.
 - **AI performance summary** (under $0.01/generation) — from the admin Reports tab, generate a short factual summary of performance over a chosen period, shown at the top of the public Insights page.
+
+## Optional integrations: CLV & notifications
+
+Two more optional, free features. Both rely on something the app doesn't do on its own: running a job **on a schedule**, independent of anyone having the app open. There's one endpoint for this, `POST /api/cron/tick`, protected by a `CRON_SECRET` you set — point any scheduler at it (a few options below) and both features below activate automatically; leave `CRON_SECRET` unset and the route always returns 401, so this is opt-in.
+
+**Closing Line Value (CLV)** — compares the odds you got on a bet against the market's closing price, the standard "did you find value" metric independent of whether the bet actually won. Powered by [TheOddsAPI](https://the-odds-api.com)'s free tier (500 requests/month — one request covers every upcoming event for a sport in one call, so this comfortably fits real usage). Set `THE_ODDS_API_KEY` to enable it. Scope is deliberately narrow: only **Match Winner/Match Result** bets in a curated list of major leagues (see `SPORT_KEY_MAP` in [src/lib/oddsApi.ts](src/lib/oddsApi.ts)) get a closing price — that's the only market available cheaply on the free tier, and team names are matched against your bet's freeform matchup text on a best-effort basis, so not every leg will get one. Once you have data, a "Closing Line Value" tile appears on the Insights → Patterns tab.
+
+**Push notifications** — a browser notification when a `pending` bet's event has clearly passed (6+ hours) and it's still unsettled. Free and browser-native, no third-party push service. Generate a keypair once with `npx web-push generate-vapid-keys`, set `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`/`VAPID_SUBJECT`/`NEXT_PUBLIC_VAPID_PUBLIC_KEY`, then click "Enable Notifications" in the admin Data tab.
+
+**Wiring up the scheduler:**
+
+- **Vercel**: nothing extra to do — this repo ships a `vercel.json` cron entry (every 6 hours) that calls the endpoint, and Vercel automatically sends the `Authorization: Bearer $CRON_SECRET` header for you as long as that env var is set. Check your plan's cron frequency limits.
+- **Anywhere else**: point a free scheduler — [cron-job.org](https://cron-job.org), a GitHub Actions [scheduled workflow](https://docs.github.com/actions/using-workflows/events-that-trigger-workflows#schedule), or your own crontab — at:
+  ```bash
+  curl -X POST https://your-domain/api/cron/tick -H "Authorization: Bearer $CRON_SECRET"
+  ```
 
 ## Making it your own
 
@@ -160,11 +181,12 @@ src/
     charts/                 SVG charts (shared LineChart + Bankroll/P&L/Goal wrappers)
     layout/                 Header, Footer, ThemeToggle — used by the root layout
 
-  hooks/                  Shared React hooks (e.g. useAiEnabled)
+  hooks/                  Shared React hooks (e.g. useAiEnabled, useClvEnabled)
 
   lib/                    Framework-free logic — types, storage, stats/analytics,
                           bet-form helpers, filters, odds/units formatting, CSV
-                          import/export, the AI slip parser, and admin auth
+                          import/export, the AI slip parser, admin auth, and the
+                          optional TheOddsAPI/CLV and web-push integrations
 ```
 
 A few things worth knowing if you're extending this:

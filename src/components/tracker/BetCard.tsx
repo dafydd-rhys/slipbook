@@ -77,15 +77,17 @@ function SportBadge({ sport }: { sport?: SportType }) {
   );
 }
 
+// Colour/label for each result, shared by the result chip and the total-odds pill.
+const RESULT_STYLES: Record<BetResult, { color: string; soft: string; label: string }> = {
+  won:     { color: 'var(--won)', soft: 'var(--won-soft)', label: 'WON' },
+  lost:    { color: 'var(--lost)', soft: 'var(--lost-soft)', label: 'LOST' },
+  void:    { color: 'var(--void)', soft: 'var(--void-soft)', label: 'VOID' },
+  pending: { color: 'var(--pending)', soft: 'var(--pending-soft)', label: 'PENDING' },
+};
+
 // Coloured pill showing a leg or sub-leg's result (won/lost/void/pending).
 function ResultChip({ result }: { result: BetResult }) {
-  const resultStyles: Record<BetResult, { color: string; soft: string; label: string }> = {
-    won:     { color: 'var(--won)', soft: 'var(--won-soft)', label: 'WON' },
-    lost:    { color: 'var(--lost)', soft: 'var(--lost-soft)', label: 'LOST' },
-    void:    { color: 'var(--void)', soft: 'var(--void-soft)', label: 'VOID' },
-    pending: { color: 'var(--pending)', soft: 'var(--pending-soft)', label: 'PENDING' },
-  };
-  const style = resultStyles[result];
+  const style = RESULT_STYLES[result];
 
   return (
     <span style={{
@@ -299,13 +301,22 @@ function CardHeader({ bet, fmt, shareable, cardRef }: { bet: Bet; fmt: OddsForma
             BOOST
           </span>
         )}
+        {bet.cashedOut && (
+          <span style={{
+            fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 700, letterSpacing: '0.06em',
+            color: 'var(--pending)', background: 'var(--pending-soft)', border: '1px solid color-mix(in srgb, var(--pending) 45%, transparent)',
+            borderRadius: 5, padding: '2px 6px',
+          }}>
+            CASHED OUT
+          </span>
+        )}
         {bet.isBoosted && bet.baseTotalOdds && (
           <span className="tabular" style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-faint)', textDecoration: 'line-through', whiteSpace: 'nowrap' }}>
             @ {formatOdds(bet.baseTotalOdds, fmt)}
           </span>
         )}
         <span className="tabular" style={{
-          background: 'var(--accent-soft)', border: '1px solid var(--accent)', color: 'var(--accent)',
+          background: RESULT_STYLES[bet.result].soft, border: `1px solid ${RESULT_STYLES[bet.result].color}`, color: RESULT_STYLES[bet.result].color,
           fontFamily: 'var(--font-mono)', borderRadius: 8, fontSize: 13.5, fontWeight: 600, padding: '4px 10px', whiteSpace: 'nowrap',
         }}>
           @ {formatOdds(bet.totalOdds, fmt)}

@@ -4,6 +4,8 @@
 // No React, no fetch — usable from both client components and server routes.
 import { Bet, BetStats, BetType, FilterType, SportType, BreakdownRow, StreakInfo, DrawdownInfo } from './types';
 import { toUnits } from './units';
+import { canonicalMarket } from './marketAliases';
+import { computeBetResult } from './betForm';
 
 // ── Date-range filter + top-line stats (moved here from FilterBar so the same
 // logic is usable server-side, e.g. for the AI summary) ─────────────────────
@@ -125,9 +127,65 @@ function betSportKey(bet: Bet): string {
   return 'mixed';
 }
 
-// Performance broken down by sport.
+// Performance broken down by sport. Money (staked/returns/pnl/units) stays
+// attributed at the bet level — a multi-sport acca can't have its P&L
+// honestly split across sports, so those bets' money lands in "Mixed".
+// Bet/win counts, however, are tallied per leg (same idea as
+// marketBreakdown), so a football leg inside a mixed acca still counts
+// toward football's numbers instead of disappearing into "Mixed" entirely.
 export function sportBreakdown(bets: Bet[]): BreakdownRow[] {
-  return aggregateBets(bets, betSportKey, (key) => key === 'mixed' ? 'Mixed' : SPORT_LABELS[key as SportType] ?? key);
+  const moneyRows = aggregateBets(bets, betSportKey, (key) => key === 'mixed' ? 'Mixed' : SPORT_LABELS[key as SportType] ?? key);
+
+  const legCounts = new Map<string, { total: number; won: number; settled: number }>();
+
+  for (const bet of bets) {
+    for (const leg of bet.legs) {
+      const key = leg.sport ?? 'other';
+      const legStats = legCounts.get(key) ?? { total: 0, won: 0, settled: 0 };
+
+      legStats.total++;
+
+      if (leg.result === 'won' || leg.result === 'lost') {
+        legStats.settled++;
+
+        if (leg.result === 'won') {
+          legStats.won++;
+        }
+      }
+
+      legCounts.set(key, legStats);
+    }
+  }
+
+  const rows = moneyRows.map((row) => {
+    if (row.key === 'mixed') {
+      return row; // no honest per-leg count for a bucket defined as "spans sports"
+    }
+
+    const legStats = legCounts.get(row.key);
+
+    return legStats
+      ? { ...row, bets: legStats.total, winRate: legStats.settled > 0 ? (legStats.won / legStats.settled) * 100 : 0 }
+      : row;
+  });
+
+  // Sports that only ever appear as legs inside a mixed acca (no pure-sport
+  // bets of their own) still deserve a counts-only row.
+  const coveredKeys = new Set(moneyRows.map((row) => row.key));
+
+  for (const [key, legStats] of legCounts) {
+    if (coveredKeys.has(key)) {
+      continue;
+    }
+
+    rows.push({
+      key, label: SPORT_LABELS[key as SportType] ?? key,
+      bets: legStats.total, staked: 0, returns: 0, pnl: 0, units: 0, roi: 0,
+      winRate: legStats.settled > 0 ? (legStats.won / legStats.settled) * 100 : 0,
+    });
+  }
+
+  return rows.sort((a, b) => b.bets - a.bets);
 }
 
 const BET_TYPE_LABELS: Record<BetType, string> = {
@@ -154,7 +212,7 @@ export function marketBreakdown(bets: Bet[], limit = 12): BreakdownRow[] {
 
   for (const bet of bets) {
     for (const leg of bet.legs) {
-      const key = leg.market.trim() || 'Unknown';
+      const key = leg.market.trim() ? canonicalMarket(leg.market) : 'Unknown';
       const marketStats = groups.get(key) ?? { total: 0, won: 0, settled: 0 };
 
       marketStats.total++;
@@ -505,4 +563,100 @@ export function formatStatsForAI(bets: Bet[], periodLabel: string): string {
   ];
 
   return lines.join('\n');
+}
+
+// ── Boost value ──────────────────────────────────────────────────────────────
+export interface BoostValueResult { boostedWonBets: number; extraUnits: number }
+
+// How many extra units boosted odds added, vs. what base odds would've paid —
+// a boost only pays off on a win, so this only looks at settled, boosted, won bets.
+export function computeBoostValue(bets: Bet[]): BoostValueResult {
+  const boostedWon = bets.filter((bet) => bet.isBoosted && bet.result === 'won' && bet.baseTotalOdds != null);
+  const extra = boostedWon.reduce((sum, bet) => sum + bet.stake * (bet.totalOdds - (bet.baseTotalOdds as number)), 0);
+
+  return { boostedWonBets: boostedWon.length, extraUnits: toUnits(extra) };
+}
+
+// ── Cash-out analysis ────────────────────────────────────────────────────────
+export interface CashOutAnalysisResult {
+  comparable: number;
+  excluded: number;
+  actualUnits: number;
+  hypotheticalUnits: number;
+  diffUnits: number; // actual - hypothetical; positive means cashing out won you units
+}
+
+// Compares actual cash-out returns against what a bet would've paid had it run
+// to completion. Only counts cash-outs where every leg's real result is known
+// (i.e. the admin went back and filled in what actually happened) — there's no
+// honest hypothetical for a leg that's still pending.
+export function cashOutAnalysis(bets: Bet[]): CashOutAnalysisResult {
+  const cashedOut = bets.filter((bet) => bet.cashedOut);
+
+  let comparable = 0;
+  let excluded = 0;
+  let actual = 0;
+  let hypothetical = 0;
+
+  for (const bet of cashedOut) {
+    if (bet.legs.some((leg) => leg.result === 'pending')) {
+      excluded++;
+      continue;
+    }
+
+    comparable++;
+    actual += (bet.returns ?? 0) - bet.stake;
+
+    const hypotheticalResult = computeBetResult(bet.legs.map((leg) => leg.result));
+    const hypotheticalReturns = hypotheticalResult === 'won' ? bet.stake * bet.totalOdds : 0;
+
+    hypothetical += hypotheticalReturns - bet.stake;
+  }
+
+  return {
+    comparable, excluded,
+    actualUnits: toUnits(actual), hypotheticalUnits: toUnits(hypothetical), diffUnits: toUnits(actual - hypothetical),
+  };
+}
+
+// ── Closing Line Value ───────────────────────────────────────────────────────
+export interface ClvResult { comparable: number; avgClvPct: number; beatClosingRate: number }
+
+// Compares the odds you got against the closing price captured near kickoff
+// (see clvCapture.ts) — positive CLV means you beat the closing line, the
+// standard "are you finding value" signal independent of whether the bet won.
+export function clvAnalysis(bets: Bet[]): ClvResult {
+  const legs = bets.flatMap((bet) => bet.legs).filter((leg) => leg.closingOdds != null);
+
+  if (legs.length === 0) {
+    return { comparable: 0, avgClvPct: 0, beatClosingRate: 0 };
+  }
+
+  const clvPcts = legs.map((leg) => (leg.odds / (leg.closingOdds as number) - 1) * 100);
+  const beatClosing = clvPcts.filter((pct) => pct > 0).length;
+
+  return {
+    comparable: legs.length,
+    avgClvPct: clvPcts.reduce((sum, pct) => sum + pct, 0) / legs.length,
+    beatClosingRate: (beatClosing / legs.length) * 100,
+  };
+}
+
+// ── Leg-vs-bet win divergence ─────────────────────────────────────────────────
+export interface LegVsBetDivergenceResult { bets: number; legWinRate: number; betWinRate: number }
+
+// Compares leg-level win rate against bet-level win rate for settled multi-leg
+// bets — a big gap illustrates how often individual legs win but the
+// accumulator as a whole still loses.
+export function legVsBetDivergence(bets: Bet[]): LegVsBetDivergenceResult {
+  const multiLeg = bets.filter((bet) => bet.legs.length >= 2 && (bet.result === 'won' || bet.result === 'lost'));
+  const settledLegs = multiLeg.flatMap((bet) => bet.legs).filter((leg) => leg.result === 'won' || leg.result === 'lost');
+  const legsWon = settledLegs.filter((leg) => leg.result === 'won').length;
+  const betsWon = multiLeg.filter((bet) => bet.result === 'won').length;
+
+  return {
+    bets: multiLeg.length,
+    legWinRate: settledLegs.length > 0 ? (legsWon / settledLegs.length) * 100 : 0,
+    betWinRate: multiLeg.length > 0 ? (betsWon / multiLeg.length) * 100 : 0,
+  };
 }

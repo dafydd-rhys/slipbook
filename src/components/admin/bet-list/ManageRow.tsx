@@ -1,10 +1,13 @@
 'use client';
 
-// Single row in the Manage tab: checkbox, summary line, result badge, and row actions.
-import { Bet } from '@/lib/types';
+// Single row in the Manage tab: checkbox, summary line, result badge, and row
+// actions. Expands to show each leg with quick won/lost/void/pending buttons.
+import { useState } from 'react';
+import { Bet, BetResult } from '@/lib/types';
 import { CURRENCY_SYMBOL } from '@/lib/config';
 import { RESULT_COLORS } from '../adminPanelStyles';
 import { SETTLE_SUGGEST_COST_ESTIMATE } from '@/lib/aiCostEstimates';
+import LegSettleRow from './LegSettleRow';
 
 interface ManageRowProps {
   bet: Bet;
@@ -12,11 +15,14 @@ interface ManageRowProps {
   aiEnabled: boolean | null;
   onToggleSelect: () => void;
   onSuggestResult: () => void;
+  onUpdateLegResult: (legId: string, result: BetResult) => void;
   onEdit: () => void;
   onDelete: () => void;
 }
 
-export default function ManageRow({ bet, selected, aiEnabled, onToggleSelect, onSuggestResult, onEdit, onDelete }: ManageRowProps) {
+export default function ManageRow({ bet, selected, aiEnabled, onToggleSelect, onSuggestResult, onUpdateLegResult, onEdit, onDelete }: ManageRowProps) {
+  const [expanded, setExpanded] = useState(false);
+
   return (
     <div style={{
       background: 'var(--surface)',
@@ -48,6 +54,12 @@ export default function ManageRow({ bet, selected, aiEnabled, onToggleSelect, on
       </div>
 
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', flexShrink: 0, width: '100%', justifyContent: 'flex-end' }}>
+        <button onClick={() => setExpanded((current) => !current)} style={{
+          background: 'transparent', border: '1px solid var(--border)', borderRadius: 6,
+          color: 'var(--text-muted)', fontSize: 11, padding: '4px 10px', cursor: 'pointer',
+        }}>
+          {expanded ? 'Hide Legs' : `Legs (${bet.legs.length})`}
+        </button>
         {bet.result === 'pending' && (
           <button
             onClick={onSuggestResult}
@@ -70,6 +82,14 @@ export default function ManageRow({ bet, selected, aiEnabled, onToggleSelect, on
           color: 'var(--lost)', fontSize: 11, padding: '4px 10px', cursor: 'pointer',
         }}>Delete</button>
       </div>
+
+      {expanded && (
+        <div style={{ width: '100%' }}>
+          {bet.legs.map((leg) => (
+            <LegSettleRow key={leg.id} leg={leg} onSetResult={(result) => onUpdateLegResult(leg.id, result)} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

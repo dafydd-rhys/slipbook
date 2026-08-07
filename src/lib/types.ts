@@ -79,6 +79,8 @@ export interface BetLeg {
   subLegs?: BetSubLeg[];  // nested selections inside a bet builder leg
   outcomeDecided?: boolean;
   outcome?: SportOutcome;
+  closingOdds?: number;         // best UK closing price captured via TheOddsAPI, for CLV comparison
+  closingOddsCapturedAt?: string;
   // legacy flat fields (kept for backward compat)
   score?: string;
   homeTeam?: string;
@@ -102,6 +104,7 @@ export interface Bet {
   bookmaker?: string;
   tags?: string[];
   deletedAt?: string; // soft-delete marker — set instead of removing, purged after a retention window
+  staleNotifiedAt?: string; // set once a push notification has nagged about this still-pending bet
 }
 
 export interface BetsData {
@@ -186,6 +189,22 @@ export interface BetStats {
   units: number;
   stakedUnits: number;
   avgOdds: number;
+}
+
+// ── Push notifications ───────────────────────────────────────────────────────
+export interface PushSubscriptionRecord {
+  endpoint: string;
+  keys: { p256dh: string; auth: string };
+}
+
+export interface PushSubscriptionsData {
+  subscriptions: PushSubscriptionRecord[];
+}
+
+// ── Odds API usage tracking ──────────────────────────────────────────────────
+export interface OddsApiUsage {
+  month: string; // "YYYY-MM" — resets when the stored month no longer matches the current one
+  count: number;
 }
 
 // ── Goal tracking ────────────────────────────────────────────────────────────

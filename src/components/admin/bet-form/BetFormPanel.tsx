@@ -34,6 +34,8 @@ interface BetFormPanelProps {
   setForm: Dispatch<SetStateAction<BetForm>>;
   titleAuto: boolean;
   setTitleAuto: Dispatch<SetStateAction<boolean>>;
+  bookmakerAutoDetected: boolean;
+  setBookmakerAutoDetected: Dispatch<SetStateAction<boolean>>;
   bookmakerOptions: string[];
   tagOptions: string[];
   savingTemplate: boolean;
@@ -84,6 +86,8 @@ export default function BetFormPanel(props: BetFormPanelProps) {
         setForm={setForm}
         titleAuto={props.titleAuto}
         setTitleAuto={props.setTitleAuto}
+        bookmakerAutoDetected={props.bookmakerAutoDetected}
+        setBookmakerAutoDetected={props.setBookmakerAutoDetected}
         bookmakerOptions={props.bookmakerOptions}
         tagOptions={props.tagOptions}
       />

@@ -44,5 +44,11 @@ export const COMMON_MARKETS = [
 
 export const STAKE_PRESETS = ['10', '50', '100', '200'];
 
+export const COMMON_BOOKMAKERS = [
+  'Bet365', 'William Hill', 'Paddy Power', 'Sky Bet', 'Ladbrokes', 'Coral',
+  'BetVictor', 'Betfair', 'Unibet', '888sport', 'Betway', 'Betfred',
+  'BoyleSports', '10Bet', 'DraftKings', 'FanDuel', 'BetMGM', 'Caesars',
+];
+
 // Sport picked for the last-added leg, remembered so a new leg defaults to it.
 export const LAST_SPORT_KEY = 'slipbook_last_sport';

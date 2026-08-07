@@ -172,11 +172,15 @@ function BoostedOddsRow({ form, setForm }: FieldsProps) {
 interface BetDetailsFieldsProps extends FieldsProps {
   titleAuto: boolean;
   setTitleAuto: Dispatch<SetStateAction<boolean>>;
+  bookmakerAutoDetected: boolean;
+  setBookmakerAutoDetected: Dispatch<SetStateAction<boolean>>;
   bookmakerOptions: string[];
   tagOptions: string[];
 }
 
-export default function BetDetailsFields({ form, setForm, titleAuto, setTitleAuto, bookmakerOptions, tagOptions }: BetDetailsFieldsProps) {
+export default function BetDetailsFields({
+  form, setForm, titleAuto, setTitleAuto, bookmakerAutoDetected, setBookmakerAutoDetected, bookmakerOptions, tagOptions,
+}: BetDetailsFieldsProps) {
   return (
     <div style={SECTION}>
       <p style={SECTION_TITLE}>BET DETAILS</p>
@@ -214,11 +218,20 @@ export default function BetDetailsFields({ form, setForm, titleAuto, setTitleAut
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
         <div>
           <label style={LABEL}>Bookmaker</label>
-          <input value={form.bookmaker} onChange={(event) => setForm((currentForm) => ({ ...currentForm, bookmaker: event.target.value }))}
-            placeholder="e.g. Bet365" style={INPUT} list="bookmaker-options" />
+          <input
+            value={form.bookmaker}
+            onChange={(event) => {
+              setBookmakerAutoDetected(false);
+              setForm((currentForm) => ({ ...currentForm, bookmaker: event.target.value }));
+            }}
+            placeholder="e.g. Bet365" style={INPUT} list="bookmaker-options"
+          />
           <datalist id="bookmaker-options">
             {bookmakerOptions.map((bookmaker) => <option key={bookmaker} value={bookmaker} />)}
           </datalist>
+          {bookmakerAutoDetected && form.bookmaker && (
+            <p style={{ fontSize: 10.5, color: 'var(--accent)', marginTop: 4 }}>Detected from screenshot — check it&apos;s correct.</p>
+          )}
         </div>
         <div>
           <label style={LABEL}>Tags</label>

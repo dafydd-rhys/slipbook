@@ -17,13 +17,14 @@ interface BetManageListProps {
   onBulkDelete: () => void;
   onClearSelection: () => void;
   onSuggestResult: (bet: Bet) => void;
+  onUpdateLegResult: (bet: Bet, legId: string, result: BetResult) => void;
   onEdit: (bet: Bet) => void;
   onDelete: (id: string) => void;
 }
 
 export default function BetManageList({
   bets, selectedIds, bulkBusy, aiEnabled,
-  onToggleSelect, onBulkSetResult, onBulkDelete, onClearSelection, onSuggestResult, onEdit, onDelete,
+  onToggleSelect, onBulkSetResult, onBulkDelete, onClearSelection, onSuggestResult, onUpdateLegResult, onEdit, onDelete,
 }: BetManageListProps) {
   if (bets.length === 0) {
     return <p style={{ textAlign: 'center', color: 'var(--text-faint)', padding: '40px 0', fontSize: 14 }}>No bets yet. Add one!</p>;
@@ -60,6 +61,7 @@ export default function BetManageList({
               aiEnabled={aiEnabled}
               onToggleSelect={() => onToggleSelect(bet.id)}
               onSuggestResult={() => onSuggestResult(bet)}
+              onUpdateLegResult={(legId, result) => onUpdateLegResult(bet, legId, result)}
               onEdit={() => onEdit(bet)}
               onDelete={() => onDelete(bet.id)}
             />

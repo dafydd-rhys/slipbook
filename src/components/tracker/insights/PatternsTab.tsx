@@ -2,7 +2,10 @@
 
 // Streaks, drawdown, a staking-pattern (chasing losses) check, and day/time-of-day breakdowns.
 import { Bet } from '@/lib/types';
-import { computeStreaks, computeDrawdown, stakingPatternCheck, dayOfWeekBreakdown, timeOfDayBreakdown } from '@/lib/stats';
+import {
+  computeStreaks, computeDrawdown, stakingPatternCheck, dayOfWeekBreakdown, timeOfDayBreakdown,
+  computeBoostValue, cashOutAnalysis, legVsBetDivergence, clvAnalysis,
+} from '@/lib/stats';
 import BreakdownTable from '../BreakdownTable';
 import StatCard from './StatCard';
 
@@ -22,6 +25,58 @@ function StreakAndDrawdownRow({ bets }: { bets: Bet[] }) {
       <StatCard label="LONGEST LOSS STREAK" value={String(streaks.longestLoss)} color="var(--lost)" />
       <StatCard label="MAX DRAWDOWN" value={`${drawdown.maxDrawdownUnits.toFixed(2)}u`} sub={`${drawdown.maxDrawdownPct.toFixed(0)}% off peak`} color="var(--lost)" />
       <StatCard label="CURRENT DRAWDOWN" value={`${drawdown.currentDrawdownUnits.toFixed(2)}u`} color={drawdown.currentDrawdownUnits > 0 ? 'var(--pending)' : 'var(--won)'} />
+    </div>
+  );
+}
+
+// Row of stat tiles: boost value added, cash-out vs. running it, and how
+// often winning legs still ended up in a lost acca. Each tile only shows once
+// there's enough relevant data to say something meaningful.
+function ValueInsightsRow({ bets }: { bets: Bet[] }) {
+  const boost = computeBoostValue(bets);
+  const cashOut = cashOutAnalysis(bets);
+  const divergence = legVsBetDivergence(bets);
+  const clv = clvAnalysis(bets);
+
+  if (boost.boostedWonBets === 0 && cashOut.comparable === 0 && divergence.bets === 0 && clv.comparable === 0) {
+    return null;
+  }
+
+  return (
+    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 20 }}>
+      {boost.boostedWonBets > 0 && (
+        <StatCard
+          label="BOOST VALUE ADDED"
+          value={`${boost.extraUnits >= 0 ? '+' : ''}${boost.extraUnits.toFixed(2)}u`}
+          sub={`over ${boost.boostedWonBets} boosted win${boost.boostedWonBets !== 1 ? 's' : ''}`}
+          color={boost.extraUnits >= 0 ? 'var(--won)' : 'var(--lost)'}
+        />
+      )}
+      {cashOut.comparable > 0 && (
+        <StatCard
+          label="CASH-OUT VS. RUNNING IT"
+          value={`${cashOut.diffUnits >= 0 ? '+' : ''}${cashOut.diffUnits.toFixed(2)}u`}
+          sub={cashOut.excluded > 0
+            ? `${cashOut.comparable} compared, ${cashOut.excluded} excluded (legs still pending)`
+            : `over ${cashOut.comparable} cash-out${cashOut.comparable !== 1 ? 's' : ''}`}
+          color={cashOut.diffUnits >= 0 ? 'var(--won)' : 'var(--lost)'}
+        />
+      )}
+      {divergence.bets > 0 && (
+        <StatCard
+          label="LEG WIN RATE"
+          value={`${divergence.legWinRate.toFixed(0)}%`}
+          sub={`vs. ${divergence.betWinRate.toFixed(0)}% bet win rate over ${divergence.bets} multi-leg bets`}
+        />
+      )}
+      {clv.comparable > 0 && (
+        <StatCard
+          label="CLOSING LINE VALUE"
+          value={`${clv.avgClvPct >= 0 ? '+' : ''}${clv.avgClvPct.toFixed(1)}%`}
+          sub={`beat the close on ${clv.beatClosingRate.toFixed(0)}% of ${clv.comparable} Match Winner legs (vs. best UK closing price)`}
+          color={clv.avgClvPct >= 0 ? 'var(--won)' : 'var(--lost)'}
+        />
+      )}
     </div>
   );
 }
@@ -49,6 +104,7 @@ export default function PatternsTab({ bets }: { bets: Bet[] }) {
   return (
     <div className="fade-in">
       <StreakAndDrawdownRow bets={bets} />
+      <ValueInsightsRow bets={bets} />
       <StakingPatternNotice bets={bets} />
 
       <div style={{ marginBottom: 10 }}>

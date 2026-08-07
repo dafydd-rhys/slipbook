@@ -1,10 +1,26 @@
 'use client';
 
 // "Data" tab — export bets/bankroll as CSV or JSON, and import bets from a file.
-import { useRef, useState } from 'react';
-import { Bet, BankrollEntry } from '@/lib/types';
+import { useEffect, useRef, useState } from 'react';
+import { Bet, BankrollEntry, BetLeg } from '@/lib/types';
 import { betsToCSV, betsToJSON, bankrollToCSV, bankrollToJSON, downloadFile, parseBetsCSV, ImportableBet } from '@/lib/exportImport';
+import { canonicalMarket } from '@/lib/marketAliases';
 import { SECTION, SECTION_TITLE } from './adminPanelStyles';
+
+const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+
+// VAPID application server keys are base64url — the Push API needs them as raw bytes.
+function urlBase64ToUint8Array(base64: string): Uint8Array<ArrayBuffer> {
+  const padded = (base64 + '='.repeat((4 - (base64.length % 4)) % 4)).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(padded);
+  const bytes = new Uint8Array(raw.length);
+
+  for (let i = 0; i < raw.length; i++) {
+    bytes[i] = raw.charCodeAt(i);
+  }
+
+  return bytes;
+}
 
 const BTN: React.CSSProperties = {
   background: 'transparent', border: '1px solid var(--border)', borderRadius: 8,
@@ -21,6 +37,69 @@ export default function DataAdmin({ bets, onImported }: { bets: Bet[]; onImporte
   const [importing, setImporting] = useState(false);
   const [result, setResult] = useState('');
   const [error, setError] = useState('');
+  const [normalizing, setNormalizing] = useState(false);
+  const [normalizeResult, setNormalizeResult] = useState('');
+  const [pushSubscribed, setPushSubscribed] = useState(false);
+  const [pushBusy, setPushBusy] = useState(false);
+  const [pushError, setPushError] = useState('');
+
+  const pushSupported = !!VAPID_PUBLIC_KEY && typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window;
+
+  useEffect(() => {
+    if (!pushSupported) {
+      return;
+    }
+
+    navigator.serviceWorker.ready
+      .then((registration) => registration.pushManager.getSubscription())
+      .then((subscription) => setPushSubscribed(!!subscription))
+      .catch(() => {});
+  }, [pushSupported]);
+
+  // Subscribes this browser to push and registers it server-side, or tears
+  // both down — a single toggle for "notify me about stale pending bets."
+  async function togglePush() {
+    setPushBusy(true);
+    setPushError('');
+
+    try {
+      const registration = await navigator.serviceWorker.ready;
+
+      if (pushSubscribed) {
+        const subscription = await registration.pushManager.getSubscription();
+
+        if (subscription) {
+          await fetch('/api/push/subscribe', {
+            method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: subscription.endpoint }),
+          });
+          await subscription.unsubscribe();
+        }
+
+        setPushSubscribed(false);
+        return;
+      }
+
+      const permission = await Notification.requestPermission();
+
+      if (permission !== 'granted') {
+        throw new Error('Notification permission denied');
+      }
+
+      const subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY as string),
+      });
+
+      await fetch('/api/push/subscribe', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(subscription.toJSON()),
+      });
+      setPushSubscribed(true);
+    } catch (err) {
+      setPushError(err instanceof Error ? err.message : 'Failed to enable notifications');
+    } finally {
+      setPushBusy(false);
+    }
+  }
 
   async function exportBankroll(format: 'csv' | 'json') {
     const entries: BankrollEntry[] = await fetch('/api/bankroll').then((response) => response.json());
@@ -71,6 +150,50 @@ export default function DataAdmin({ bets, onImported }: { bets: Bet[]; onImporte
     }
   }
 
+  // Rewrites each leg's market to its canonical spelling where one is known
+  // (e.g. "Moneyline" -> "Match Winner") — only relabels legs that match a
+  // known synonym, everything else (odds, stake, results, dates) is untouched.
+  async function normalizeMarkets() {
+    setNormalizing(true);
+    setNormalizeResult('');
+
+    try {
+      let legsChanged = 0;
+      const changedBets: { id: string; legs: BetLeg[] }[] = [];
+
+      for (const bet of bets) {
+        let betChanged = false;
+        const legs = bet.legs.map((leg) => {
+          const canonical = canonicalMarket(leg.market);
+
+          if (canonical !== leg.market) {
+            legsChanged++;
+            betChanged = true;
+
+            return { ...leg, market: canonical };
+          }
+
+          return leg;
+        });
+
+        if (betChanged) {
+          changedBets.push({ id: bet.id, legs });
+        }
+      }
+
+      await Promise.all(changedBets.map(({ id, legs }) =>
+        fetch(`/api/bets/${id}`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ legs }),
+        })
+      ));
+
+      setNormalizeResult(`Normalized ${legsChanged} market name${legsChanged !== 1 ? 's' : ''} across ${changedBets.length} bet${changedBets.length !== 1 ? 's' : ''}.`);
+      onImported();
+    } finally {
+      setNormalizing(false);
+    }
+  }
+
   return (
     <div>
       <div style={SECTION}>
@@ -117,6 +240,42 @@ export default function DataAdmin({ bets, onImported }: { bets: Bet[]; onImporte
         {result && <p style={{ fontSize: 12, color: 'var(--won)', marginTop: 10 }}>{result}</p>}
         {error && <p style={{ fontSize: 12, color: 'var(--lost)', marginTop: 10 }}>{error}</p>}
       </div>
+
+      <div style={SECTION}>
+        <p style={SECTION_TITLE}>DATA CLEANUP</p>
+        <p style={{ fontSize: 11.5, color: 'var(--text-faint)', marginBottom: 12, maxWidth: '55ch' }}>
+          Relabels leg markets that are just spelling variants of the same market (e.g. &quot;Moneyline&quot; and
+          &quot;2-Way Winner&quot; both become &quot;Match Winner&quot;), so the Insights market breakdown isn&apos;t
+          split across duplicates. Only known synonyms are changed — odds, stake, results and dates are never touched.
+        </p>
+        <button
+          onClick={normalizeMarkets}
+          disabled={normalizing}
+          style={{ ...BTN, cursor: normalizing ? 'not-allowed' : 'pointer', opacity: normalizing ? 0.6 : 1 }}
+        >
+          {normalizing ? 'Normalizing…' : 'Normalize Market Names'}
+        </button>
+        {normalizeResult && <p style={{ fontSize: 12, color: 'var(--won)', marginTop: 10 }}>{normalizeResult}</p>}
+      </div>
+
+      {pushSupported && (
+        <div style={SECTION}>
+          <p style={SECTION_TITLE}>NOTIFICATIONS</p>
+          <p style={{ fontSize: 11.5, color: 'var(--text-faint)', marginBottom: 12, maxWidth: '55ch' }}>
+            Get a push notification when a bet&apos;s event has clearly passed and it&apos;s still pending — a nudge
+            to settle it instead of it sitting forgotten. Needs the scheduled job configured (see the README) to
+            actually check and send these.
+          </p>
+          <button
+            onClick={togglePush}
+            disabled={pushBusy}
+            style={{ ...BTN, cursor: pushBusy ? 'not-allowed' : 'pointer', opacity: pushBusy ? 0.6 : 1 }}
+          >
+            {pushBusy ? 'Working…' : pushSubscribed ? 'Disable Notifications' : 'Enable Notifications'}
+          </button>
+          {pushError && <p style={{ fontSize: 12, color: 'var(--lost)', marginTop: 10 }}>{pushError}</p>}
+        </div>
+      )}
     </div>
   );
 }

@@ -4,6 +4,7 @@
 // (e.g. by the screenshot/text import flow) without a React tree.
 import { Bet, BetLeg, BetResult, BetSubLeg, BetType, SportOutcome, SportType } from './types';
 import { autoTitle, LAST_SPORT_KEY } from './betFormOptions';
+import { canonicalMarket } from './marketAliases';
 
 export type LegForm = {
   selection: string; market: string; matchup: string;
@@ -129,7 +130,7 @@ function buildBetLeg(leg: LegForm, formOdds: string, index: number): BetLeg {
   return {
     id: `leg-${Date.now()}-${index}`,
     selection: leg.selection || 'Selection',
-    market: leg.market || 'Market',
+    market: leg.market ? canonicalMarket(leg.market) : 'Market',
     matchup: leg.matchup,
     odds: effectiveOdds,
     baseOdds,

@@ -273,6 +273,29 @@ export const KB_SECTIONS: KbSection[] = [
     ),
   },
   {
+    id: 'clv', title: 'Closing Line Value',
+    Content: () => (
+      <p>
+        When configured (a free TheOddsAPI key, see the README), a scheduled job captures the market&apos;s
+        closing price for your <strong>Match Winner/Match Result</strong> bets in a handful of major leagues,
+        matched against your bet&apos;s selection on a best-effort basis. Once there&apos;s data, a &quot;Closing
+        Line Value&quot; tile on the Insights → Patterns tab shows whether you&apos;re typically getting better or
+        worse odds than the market settled on — a signal independent of whether the bet actually won.
+      </p>
+    ),
+  },
+  {
+    id: 'notifications', title: 'Push Notifications',
+    Content: () => (
+      <p>
+        When configured (see the README), the same scheduled job checks for <strong>pending</strong> bets whose
+        event happened more than 6 hours ago and sends a single browser push notification nudging you to settle
+        them, instead of them sitting forgotten. Turn it on from the admin Data tab — it&apos;s per-browser, free,
+        and uses no third-party push service.
+      </p>
+    ),
+  },
+  {
     id: 'tax', title: 'Tax Report',
     Content: () => (
       <>

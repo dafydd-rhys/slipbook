@@ -12,7 +12,7 @@ import {
   BetForm, LegForm, buildBet, computeBaseOddsFromLegs, computeBetResult, computeBoostedOddsFromLegs,
   emptyForm, emptyLeg,
 } from '@/lib/betForm';
-import { autoTitle } from '@/lib/betFormOptions';
+import { autoTitle, COMMON_BOOKMAKERS } from '@/lib/betFormOptions';
 
 import AdminTabs, { AdminTab } from '@/components/admin/AdminTabs';
 import PinLogin, { MAX_PIN_LEN } from '@/components/admin/PinLogin';
@@ -30,7 +30,11 @@ import { useAiEnabled } from '@/hooks/useAiEnabled';
 
 const CONTENT_WIDTH = 720;
 
-type ParsedSlipResponse = { date: string; stake: number | null; legs: ParsedLeg[] };
+type ParsedSlipResponse = {
+  date: string; stake: number | null; legs: ParsedLeg[];
+  bookmaker: string | null; isBoosted: boolean; baseTotalOdds: number | null; totalOdds: number | null;
+  cashedOut: boolean; cashOutReturns: number | null;
+};
 
 type ConfirmState = {
   title: string; message: string; confirmLabel: string; confirmColor?: string;
@@ -44,7 +48,11 @@ function parsedSlipToForm(data: ParsedSlipResponse): BetForm {
     selection: parsedLeg.selection,
     market: parsedLeg.market,
     matchup: parsedLeg.matchup,
-    odds: String(parsedLeg.odds),
+    // A boosted leg's base price goes in "odds" (base), boosted price in "boostedOdds" —
+    // same convention handleEdit() uses when loading a saved boosted leg.
+    odds: parsedLeg.isBoosted && parsedLeg.baseOdds != null ? String(parsedLeg.baseOdds) : String(parsedLeg.odds),
+    boostedOdds: parsedLeg.isBoosted && parsedLeg.baseOdds != null ? String(parsedLeg.odds) : '',
+    isBoosted: parsedLeg.isBoosted,
     oddsTouched: true,
     sport: parsedLeg.sport,
     result: parsedLeg.result,
@@ -56,15 +64,25 @@ function parsedSlipToForm(data: ParsedSlipResponse): BetForm {
     legs.length === 1 && legs[0].isBetBuilder ? 'bet_builder'
     : legs.length === 1 ? 'single' : legs.length === 2 ? 'double' : legs.length === 3 ? 'treble' : 'acca';
 
+  // A whole-bet boost read directly off the slip overrides the leg-product
+  // auto-calc; otherwise total odds keep auto-calculating from the legs as normal.
+  const betLevelBoost = data.isBoosted && data.baseTotalOdds != null && data.totalOdds != null;
+
   return {
     ...emptyForm(),
     date: new Date(data.date).toISOString().slice(0, 16),
     type,
     title: autoTitle(type),
     legs,
-    odds: computeBaseOddsFromLegs(legs),
-    oddsAutoCalc: true,
-    result: computeBetResult(legs.map((leg) => leg.result)),
+    odds: betLevelBoost ? String(data.baseTotalOdds) : computeBaseOddsFromLegs(legs),
+    oddsAutoCalc: !betLevelBoost,
+    boostedOdds: betLevelBoost ? String(data.totalOdds) : (data.isBoosted ? computeBoostedOddsFromLegs(legs) : ''),
+    boostedOddsAutoCalc: !betLevelBoost && data.isBoosted,
+    isBoosted: data.isBoosted || legs.some((leg) => leg.isBoosted),
+    bookmaker: data.bookmaker ?? '',
+    cashedOut: data.cashedOut,
+    returns: data.cashedOut && data.cashOutReturns != null ? String(data.cashOutReturns) : '',
+    result: data.cashedOut ? 'won' : computeBetResult(legs.map((leg) => leg.result)),
     stake: data.stake != null ? String(data.stake) : emptyForm().stake,
   };
 }
@@ -102,7 +120,18 @@ export default function AdminPage() {
   const [form, setForm]           = useState<BetForm>(emptyForm());
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving]       = useState(false);
-  const [tab, setTab]             = useState<AdminTab>('add');
+  // Opens straight to a specific tab if linked with e.g. ?tab=manage — used
+  // by the stale-pending-bet push notification's click target.
+  const [tab, setTab]             = useState<AdminTab>(() => {
+    if (typeof window === 'undefined') {
+      return 'add';
+    }
+
+    const tabParam = new URLSearchParams(window.location.search).get('tab');
+    const validTabs: AdminTab[] = ['add', 'manage', 'bankroll', 'reports', 'data', 'trash'];
+
+    return validTabs.includes(tabParam as AdminTab) ? (tabParam as AdminTab) : 'add';
+  });
   const [msg, setMsg]             = useState('');
   const [titleAuto, setTitleAuto] = useState(true);
   const [parsingSlip, setParsingSlip] = useState(false);
@@ -124,8 +153,9 @@ export default function AdminPage() {
   const [settleBusy, setSettleBusy] = useState(false);
 
   const aiEnabled = useAiEnabled();
-  const bookmakerOptions = uniqueBookmakers(bets);
+  const bookmakerOptions = Array.from(new Set([...COMMON_BOOKMAKERS, ...uniqueBookmakers(bets)])).sort();
   const tagOptions = uniqueTags(bets);
+  const [bookmakerAutoDetected, setBookmakerAutoDetected] = useState(false);
 
   const [previewBet, setPreviewBet] = useState<Bet | null>(null);
   const [batchPreview, setBatchPreview] = useState<Bet[] | null>(null);
@@ -169,6 +199,7 @@ export default function AdminPage() {
 
     setForm(newForm);
     setTitleAuto(true);
+    setBookmakerAutoDetected(!!data.bookmaker);
     setPreviewBet(buildBet(newForm));
   }
 
@@ -387,6 +418,30 @@ export default function AdminPage() {
 
   function updateLeg<K extends keyof LegForm>(index: number, field: K, value: LegForm[K]) {
     updateLegOdds(index, { [field]: value } as Partial<LegForm>);
+
+    // Keep the overall result in sync whenever a leg's result changes —
+    // otherwise they can silently drift apart.
+    if (field === 'result') {
+      setForm((currentForm) => ({ ...currentForm, result: computeBetResult(currentForm.legs.map((leg) => leg.result)) }));
+    }
+  }
+
+  // Sets one leg's result directly from the Manage list (without opening the
+  // full edit form) and recomputes the bet's overall result to match.
+  async function updateLegResult(bet: Bet, legId: string, result: BetResult) {
+    const legs = bet.legs.map((leg) => leg.id === legId ? { ...leg, result } : leg);
+    const nextResult = computeBetResult(legs.map((leg) => leg.result));
+
+    const res = await fetch(`/api/bets/${bet.id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ legs, result: nextResult }),
+    });
+
+    if (res.status === 401) {
+      setAuthed(false);
+      return;
+    }
+
+    await loadBets();
   }
 
   function addLeg() {
@@ -450,6 +505,7 @@ export default function AdminPage() {
       setForm(emptyForm());
       setEditingId(null);
       setTitleAuto(true);
+      setBookmakerAutoDetected(false);
       await loadBets();
       setTab('manage');
     } else if (res.status === 401) {
@@ -642,6 +698,7 @@ export default function AdminPage() {
   function handleEdit(bet: Bet) {
     setEditingId(bet.id);
     setTitleAuto(false);
+    setBookmakerAutoDetected(false);
     setForm({
       date:        new Date(bet.date).toISOString().slice(0, 16),
       title:       bet.title,
@@ -690,6 +747,7 @@ export default function AdminPage() {
         setEditingId(null);
         setForm(emptyForm());
         setTitleAuto(true);
+        setBookmakerAutoDetected(false);
       },
     });
   }
@@ -757,6 +815,7 @@ export default function AdminPage() {
               setTemplatePick('');
             }}
             form={form} setForm={setForm} titleAuto={titleAuto} setTitleAuto={setTitleAuto}
+            bookmakerAutoDetected={bookmakerAutoDetected} setBookmakerAutoDetected={setBookmakerAutoDetected}
             bookmakerOptions={bookmakerOptions} tagOptions={tagOptions}
             savingTemplate={savingTemplate} onSaveTemplate={handleSaveTemplate}
             onAddLeg={addLeg} onUpdateLeg={updateLeg} onUpdateLegOdds={updateLegOdds} onRemoveLeg={removeLeg}
@@ -775,6 +834,7 @@ export default function AdminPage() {
             onBulkDelete={bulkDelete}
             onClearSelection={() => setSelectedIds(new Set())}
             onSuggestResult={openSettleSuggest}
+            onUpdateLegResult={updateLegResult}
             onEdit={handleEdit}
             onDelete={confirmDelete}
           />

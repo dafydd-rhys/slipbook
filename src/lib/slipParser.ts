@@ -21,6 +21,8 @@ export interface ParsedLeg {
   market: string;
   matchup: string;
   odds: number;
+  baseOdds: number | null;
+  isBoosted: boolean;
   sport: SportType;
   result: BetResult;
   isBetBuilder: boolean;
@@ -31,6 +33,12 @@ export interface ParsedSlip {
   date: string; // resolved ISO date/time — see resolveDate()
   stake: number | null;
   legs: ParsedLeg[];
+  bookmaker: string | null;
+  isBoosted: boolean;
+  baseTotalOdds: number | null;
+  totalOdds: number | null;
+  cashedOut: boolean;
+  cashOutReturns: number | null;
 }
 
 // Raw shape returned by the model, before date resolution / stripping the
@@ -43,6 +51,12 @@ interface RawSlip {
   betDateTime: string | null;
   stake: number | null;
   legs: RawLeg[];
+  bookmaker: string | null;
+  isBoosted: boolean;
+  baseTotalOdds: number | null;
+  totalOdds: number | null;
+  cashedOut: boolean;
+  cashOutReturns: number | null;
 }
 
 const SUB_LEG_SCHEMA = {
@@ -61,7 +75,12 @@ const LEG_SCHEMA = {
     selection: { type: 'string', description: 'The specific pick, e.g. player, team, or outcome name' },
     market: { type: 'string', description: "The bet market, e.g. 'Match Winner', 'Over/Under 2.5 Goals'" },
     matchup: { type: 'string', description: "The event/fixture, e.g. 'Arsenal vs Chelsea'" },
-    odds: { type: 'number', description: 'Decimal odds for this leg' },
+    odds: { type: 'number', description: 'Decimal odds for this leg — the final/effective price shown, after any boost' },
+    baseOdds: {
+      anyOf: [{ type: 'number' }, { type: 'null' }],
+      description: 'The pre-boost decimal odds for this leg if a boosted/enhanced price is shown (e.g. a struck-through original price), or null if not boosted',
+    },
+    isBoosted: { type: 'boolean', description: 'True if this leg has a boosted/enhanced price (look for a "boost"/"enhanced" label or a struck-through original price)' },
     sport: { type: 'string', enum: SPORTS, description: 'Best-guess sport for this leg; "other" if unclear' },
     result: { type: 'string', enum: RESULTS, description: 'Settled result of this leg; "pending" if not yet settled/unclear' },
     dateTime: {
@@ -78,7 +97,7 @@ const LEG_SCHEMA = {
       description: 'Individual conditions bundled into this leg when isBetBuilder is true; empty array otherwise',
     },
   },
-  required: ['selection', 'market', 'matchup', 'odds', 'sport', 'result', 'dateTime', 'isBetBuilder', 'subLegs'],
+  required: ['selection', 'market', 'matchup', 'odds', 'baseOdds', 'isBoosted', 'sport', 'result', 'dateTime', 'isBetBuilder', 'subLegs'],
   additionalProperties: false,
 } as const;
 
@@ -94,8 +113,29 @@ const SCHEMA = {
       anyOf: [{ type: 'number' }, { type: 'null' }],
       description: 'Total stake as a plain number with no currency symbol, or null if not visible',
     },
+    bookmaker: {
+      anyOf: [{ type: 'string' }, { type: 'null' }],
+      description: 'The bookmaker this slip is from, if identifiable from branding/logo/header text/colours, else null',
+    },
+    isBoosted: {
+      type: 'boolean',
+      description: 'True only if the WHOLE BET has a boosted/enhanced total price shown (e.g. an "Acca Boost" banner) that is not just the product of already-boosted individual legs',
+    },
+    baseTotalOdds: {
+      anyOf: [{ type: 'number' }, { type: 'null' }],
+      description: 'The pre-boost total odds when isBoosted is true and a base total is shown, else null',
+    },
+    totalOdds: {
+      anyOf: [{ type: 'number' }, { type: 'null' }],
+      description: 'The boosted/effective total odds when isBoosted is true and shown directly on the slip, else null',
+    },
+    cashedOut: { type: 'boolean', description: 'True if the slip shows this bet was cashed out early (look for a "Cash Out"/"Cashed Out" label)' },
+    cashOutReturns: {
+      anyOf: [{ type: 'number' }, { type: 'null' }],
+      description: 'The amount paid out for the cash-out, as a plain number with no currency symbol, when cashedOut is true, else null',
+    },
   },
-  required: ['legs', 'betDateTime', 'stake'],
+  required: ['legs', 'betDateTime', 'stake', 'bookmaker', 'isBoosted', 'baseTotalOdds', 'totalOdds', 'cashedOut', 'cashOutReturns'],
   additionalProperties: false,
 } as const;
 
@@ -109,7 +149,9 @@ Identify every individual leg (selection) in the bet, in the order they appear o
 - selection: the specific pick made (player, team, or outcome name)
 - market: the type of bet/market (e.g. "Match Winner", "Over/Under 2.5 Goals", "Anytime Goalscorer")
 - matchup: the two competitors or event name (e.g. "Arsenal vs Chelsea")
-- odds: the odds for that leg, converted to decimal odds as a number (e.g. fractional 6/4 -> 2.5, American +150 -> 2.5)
+- odds: the odds for that leg, converted to decimal odds as a number (e.g. fractional 6/4 -> 2.5, American +150 -> 2.5). Use the final/effective price if the leg is boosted.
+- baseOdds: if this leg shows a boosted/enhanced price (e.g. a struck-through original price next to a highlighted new one), the pre-boost decimal odds; otherwise null.
+- isBoosted: true if this leg has its own boosted/enhanced price, otherwise false.
 - sport: classify this leg's sport as one of: ${SPORTS.join(', ')}. Use "other" if you can't confidently tell.
 - result: this leg's settled result: "won", "lost", "void", or "pending". Look for colour coding (commonly green = won, red = lost), checkmarks/crosses, strikethrough text, or explicit labels. If nothing indicates a settled result, use "pending".
 - dateTime: the kickoff/event date-time for this leg as an ISO 8601 string (resolve relative days/bare times against today's date above), or null if not visible.
@@ -119,6 +161,9 @@ Identify every individual leg (selection) in the bet, in the order they appear o
 Also extract:
 - betDateTime: the bet's overall placed-at or kickoff date-time as an ISO 8601 string if shown anywhere on the slip, or null if not visible.
 - stake: the total stake as a plain number with no currency symbol (e.g. 10.5), or null if no stake is visible.
+- bookmaker: the bookmaker this slip is from, if you can identify it from a logo, header text, colour scheme, or URL — otherwise null. Don't guess if there's no real signal.
+- isBoosted / baseTotalOdds / totalOdds: set isBoosted true ONLY if the whole bet has its own boosted/enhanced total price shown (e.g. an "Acca Boost" banner with a before/after total) — not just because individual legs are boosted. When true, baseTotalOdds is the pre-boost total and totalOdds is the boosted total, both as shown; otherwise both null.
+- cashedOut / cashOutReturns: cashedOut is true if the slip shows this bet was cashed out early (look for a "Cash Out"/"Cashed Out" label). When true, cashOutReturns is the amount paid out, as a plain number with no currency symbol; otherwise cashOutReturns is null.
 
 If a value is hard to read, make your best reasonable estimate rather than leaving it blank.`;
 }
@@ -160,11 +205,19 @@ function rawToParsedSlip(raw: RawSlip): ParsedSlip {
       market: leg.market,
       matchup: leg.matchup,
       odds: leg.odds,
+      baseOdds: leg.baseOdds,
+      isBoosted: leg.isBoosted,
       sport: leg.sport,
       result: leg.result,
       isBetBuilder: leg.isBetBuilder,
       subLegs: leg.subLegs,
     })),
+    bookmaker: raw.bookmaker,
+    isBoosted: raw.isBoosted,
+    baseTotalOdds: raw.baseTotalOdds,
+    totalOdds: raw.totalOdds,
+    cashedOut: raw.cashedOut,
+    cashOutReturns: raw.cashOutReturns,
   };
 }
 
@@ -215,6 +268,8 @@ Identify every individual leg (selection) described, in the order mentioned. For
 - market: the type of bet/market (e.g. "Match Winner", "Over/Under 2.5 Goals"). Infer a reasonable market if only implied (e.g. "Arsenal to win" -> "Match Result").
 - matchup: the fixture/event if mentioned (e.g. "Arsenal vs Chelsea"), else empty string
 - odds: decimal odds as a number. Convert fractional/American if given. If odds truly aren't mentioned for a leg, use 2.00 as a placeholder — the admin will correct it.
+- baseOdds: the pre-boost odds only if the text explicitly describes this leg as boosted/enhanced with an original price mentioned; otherwise null.
+- isBoosted: true only if the text explicitly describes this leg as boosted/enhanced.
 - sport: classify as one of: ${SPORTS.join(', ')}. Use "other" if unclear.
 - result: "pending" unless the text explicitly says the bet already won or lost.
 - dateTime: kickoff/event date-time as ISO 8601 if mentioned or impliable from today's date above, else null.
@@ -222,8 +277,11 @@ Identify every individual leg (selection) described, in the order mentioned. For
 - subLegs: the bundled conditions when isBetBuilder is true, else empty array.
 
 Also extract betDateTime (ISO 8601 or null) and stake (a plain number, or null if not mentioned).
+- bookmaker: only if a specific bookmaker is named in the text, otherwise null.
+- isBoosted / baseTotalOdds / totalOdds: only if the text explicitly describes the whole bet (not just one leg) as boosted, with both prices mentioned; otherwise false/null/null.
+- cashedOut / cashOutReturns: only if the text explicitly says the bet was cashed out, with an amount mentioned; otherwise false/null.
 
-Do not invent specifics (team names, markets, odds) that were not stated or clearly implied — leave fields as their default/placeholder rather than fabricating detail.`;
+Do not invent specifics (team names, markets, odds, bookmaker) that were not stated or clearly implied — leave fields as their default/placeholder rather than fabricating detail.`;
 }
 
 // Converts a plain-English bet description into a parsed bet shape.

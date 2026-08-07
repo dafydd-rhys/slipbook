@@ -4,7 +4,10 @@
 // zero-config local dev — see createStore() below.
 import { promises as fs } from 'fs';
 import path from 'path';
-import { BetsData, Bet, BetLeg, BankrollData, BankrollEntry, BetTemplatesData, BetTemplate, Goal } from './types';
+import {
+  BetsData, Bet, BetLeg, BankrollData, BankrollEntry, BetTemplatesData, BetTemplate, Goal,
+  PushSubscriptionsData, OddsApiUsage,
+} from './types';
 import { FilterPresetsData } from './filters';
 
 // Clamps a possibly-NaN/Infinity number to a safe fallback.
@@ -334,3 +337,53 @@ const goalStore = createStore<Goal | null>('goal', 'goal.json', null);
 
 export const readGoal = goalStore.read;
 export const writeGoal = goalStore.write;
+
+// ── Push subscriptions ───────────────────────────────────────────────────────
+const pushStore = createStore<PushSubscriptionsData>('push_subscriptions', 'push-subscriptions.json', { subscriptions: [] });
+
+export const readPushSubscriptions = pushStore.read;
+
+const writePushSubscriptions = pushStore.write;
+
+// Adds a subscription (or leaves it as-is if this endpoint is already stored).
+export async function addPushSubscription(subscription: PushSubscriptionsData['subscriptions'][number]): Promise<void> {
+  const data = await readPushSubscriptions();
+
+  if (data.subscriptions.some((existing) => existing.endpoint === subscription.endpoint)) {
+    return;
+  }
+
+  data.subscriptions.push(subscription);
+  await writePushSubscriptions(data);
+}
+
+// Removes one or more subscriptions by endpoint (e.g. user opt-out, or an expired/410 endpoint pruned after a failed send).
+export async function removePushSubscriptions(endpoints: string[]): Promise<void> {
+  const data = await readPushSubscriptions();
+  const remaining = data.subscriptions.filter((existing) => !endpoints.includes(existing.endpoint));
+
+  if (remaining.length !== data.subscriptions.length) {
+    await writePushSubscriptions({ subscriptions: remaining });
+  }
+}
+
+// ── TheOddsAPI monthly request budget ────────────────────────────────────────
+const oddsUsageStore = createStore<OddsApiUsage>('odds_api_usage', 'odds-api-usage.json', { month: '', count: 0 });
+
+// Reads the usage counter, transparently resetting it if the stored month has rolled over.
+export async function readOddsApiUsage(): Promise<OddsApiUsage> {
+  const usage = await oddsUsageStore.read();
+  const currentMonth = new Date().toISOString().slice(0, 7);
+
+  return usage.month === currentMonth ? usage : { month: currentMonth, count: 0 };
+}
+
+// Adds to this month's request count, resetting first if the month has rolled over.
+export async function incrementOddsApiUsage(by: number): Promise<OddsApiUsage> {
+  const usage = await readOddsApiUsage();
+  const updated = { ...usage, count: usage.count + by };
+
+  await oddsUsageStore.write(updated);
+
+  return updated;
+}

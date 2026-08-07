@@ -14,6 +14,34 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
+self.addEventListener('push', (event) => {
+  if (!event.data) {
+    return;
+  }
+
+  const data = event.data.json();
+
+  event.waitUntil(self.registration.showNotification(data.title, {
+    body: data.body,
+    icon: '/pwa-icon?size=192',
+  }));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window' }).then((clients) => {
+      const existing = clients.find((client) => client.url.includes('/admin'));
+
+      if (existing) {
+        return existing.focus();
+      }
+
+      return self.clients.openWindow('/admin?tab=manage');
+    })
+  );
+});
+
 self.addEventListener('fetch', (event) => {
   const { request } = event;
 
