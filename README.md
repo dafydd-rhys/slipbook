@@ -127,7 +127,7 @@ Two more optional, free features. Both rely on something the app doesn't do on i
 
 **Wiring up the scheduler:**
 
-- **Vercel**: nothing extra to do — this repo ships a `vercel.json` cron entry (every 6 hours) that calls the endpoint, and Vercel automatically sends the `Authorization: Bearer $CRON_SECRET` header for you as long as that env var is set. Check your plan's cron frequency limits.
+- **Vercel**: nothing extra to do — this repo ships a `vercel.json` cron entry (once daily, 06:00 UTC) that calls the endpoint, and Vercel automatically sends the `Authorization: Bearer $CRON_SECRET` header for you as long as that env var is set. Daily is a **Hobby-plan requirement**, not just a default — Hobby accounts reject any cron expression that would run more than once a day, and the deployment fails outright (not just the cron job) if `vercel.json` violates it. On Pro or higher you can edit the schedule to run more often, e.g. `"0 */6 * * *"` for every 6 hours, for tighter closing-line capture.
 - **Anywhere else**: point a free scheduler — [cron-job.org](https://cron-job.org), a GitHub Actions [scheduled workflow](https://docs.github.com/actions/using-workflows/events-that-trigger-workflows#schedule), or your own crontab — at:
   ```bash
   curl -X POST https://your-domain/api/cron/tick -H "Authorization: Bearer $CRON_SECRET"
