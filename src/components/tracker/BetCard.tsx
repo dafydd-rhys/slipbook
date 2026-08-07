@@ -210,18 +210,29 @@ function ScoreRow({ leg }: { leg: BetLeg }) {
   );
 }
 
-// Shows a leg's odds, with the pre-boost odds struck through if it was boosted.
-function OddsDisplay({ odds, baseOdds, isBoosted, fmt }: { odds: number; baseOdds?: number; isBoosted?: boolean; fmt: OddsFormat }) {
+// Shows a leg's odds, with the pre-boost odds struck through if it was
+// boosted, and the captured closing price (if any) underneath for a direct
+// Closing Line Value comparison — green if you beat the close, red if not.
+function OddsDisplay({ odds, baseOdds, isBoosted, closingOdds, fmt }: {
+  odds: number; baseOdds?: number; isBoosted?: boolean; closingOdds?: number; fmt: OddsFormat;
+}) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-      {isBoosted && baseOdds && (
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-faint)', textDecoration: 'line-through' }}>
-          {formatOdds(baseOdds, fmt)}
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+        {isBoosted && baseOdds && (
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-faint)', textDecoration: 'line-through' }}>
+            {formatOdds(baseOdds, fmt)}
+          </span>
+        )}
+        <span className="tabular" style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 600, color: isBoosted ? 'var(--accent-strong)' : 'var(--accent)' }}>
+          @ {formatOdds(odds, fmt)}
+        </span>
+      </div>
+      {closingOdds != null && (
+        <span className="tabular" style={{ fontFamily: 'var(--font-mono)', fontSize: 9.5, color: odds >= closingOdds ? 'var(--won)' : 'var(--lost)' }}>
+          closed @ {formatOdds(closingOdds, fmt)}
         </span>
       )}
-      <span className="tabular" style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 600, color: isBoosted ? 'var(--accent-strong)' : 'var(--accent)' }}>
-        @ {formatOdds(odds, fmt)}
-      </span>
     </div>
   );
 }
@@ -252,7 +263,7 @@ function LegRow({ leg, fmt }: { leg: BetLeg; fmt: OddsFormat }) {
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5, flexShrink: 0 }}>
-          <OddsDisplay odds={leg.odds} baseOdds={leg.baseOdds} isBoosted={leg.isBoosted} fmt={fmt} />
+          <OddsDisplay odds={leg.odds} baseOdds={leg.baseOdds} isBoosted={leg.isBoosted} closingOdds={leg.closingOdds} fmt={fmt} />
           <ResultChip result={leg.result} />
         </div>
       </div>

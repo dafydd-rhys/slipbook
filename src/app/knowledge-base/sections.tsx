@@ -280,7 +280,9 @@ export const KB_SECTIONS: KbSection[] = [
         closing price for your <strong>Match Winner/Match Result</strong> bets in a handful of major leagues,
         matched against your bet&apos;s selection on a best-effort basis. Once there&apos;s data, a &quot;Closing
         Line Value&quot; tile on the Insights → Patterns tab shows whether you&apos;re typically getting better or
-        worse odds than the market settled on — a signal independent of whether the bet actually won.
+        worse odds than the market settled on — a signal independent of whether the bet actually won. Any leg with
+        a captured price also shows a small &quot;closed @&quot; line under its odds on the tracker (green if you
+        beat that price, red if not), for a direct per-bet comparison.
       </p>
     ),
   },

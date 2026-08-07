@@ -122,10 +122,10 @@ export default function DataAdmin({ bets, onImported }: { bets: Bet[]; onImporte
       }
 
       const clvLine = data.clv.ran
-        ? `CLV: ${data.clv.requestsUsed} request${data.clv.requestsUsed !== 1 ? 's' : ''} used, ${data.clv.legsUpdated} leg${data.clv.legsUpdated !== 1 ? 's' : ''} updated.`
+        ? `CLV: ${data.clv.requestsUsed} request${data.clv.requestsUsed !== 1 ? 's' : ''} used, ${data.clv.legsUpdated} leg${data.clv.legsUpdated !== 1 ? 's' : ''} updated${data.clv.reason ? ` (${data.clv.reason})` : ''}.`
         : `CLV: skipped (${data.clv.reason}).`;
       const pushLine = data.push.ran
-        ? `Push: ${data.push.staleBets} stale bet${data.push.staleBets !== 1 ? 's' : ''}, ${data.push.notified} device${data.push.notified !== 1 ? 's' : ''} notified.`
+        ? `Push: ${data.push.staleBets} stale bet${data.push.staleBets !== 1 ? 's' : ''}, ${data.push.notified} device${data.push.notified !== 1 ? 's' : ''} notified${data.push.reason ? ` (${data.push.reason})` : ''}.`
         : `Push: skipped (${data.push.reason}).`;
 
       setTickResult(`${clvLine} ${pushLine}`);

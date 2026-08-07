@@ -11,10 +11,17 @@ const MARKET_ALIASES: Record<string, string> = {
   moneyline: 'Match Winner',
   'money line': 'Match Winner',
   '2-way winner': 'Match Winner',
+  'winner 2-way': 'Match Winner',
+  'winner (2-way)': 'Match Winner',
   'two-way winner': 'Match Winner',
   'to win match': 'Match Winner',
   'to win': 'Match Winner',
   winner: 'Match Winner',
+  // Basketball/other OT-deciding sports never draw, so "including overtime"
+  // is still just a 2-way winner market, not a different one.
+  'match winner (incl. ot)': 'Match Winner',
+  'match winner incl ot': 'Match Winner',
+  'winner (incl. ot)': 'Match Winner',
 
   '1x2': 'Match Result',
   'full time result': 'Match Result',
