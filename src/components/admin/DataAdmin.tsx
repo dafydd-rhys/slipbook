@@ -42,6 +42,9 @@ export default function DataAdmin({ bets, onImported }: { bets: Bet[]; onImporte
   const [pushSubscribed, setPushSubscribed] = useState(false);
   const [pushBusy, setPushBusy] = useState(false);
   const [pushError, setPushError] = useState('');
+  const [tickBusy, setTickBusy] = useState(false);
+  const [tickResult, setTickResult] = useState('');
+  const [tickError, setTickError] = useState('');
 
   const pushSupported = !!VAPID_PUBLIC_KEY && typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window;
 
@@ -98,6 +101,39 @@ export default function DataAdmin({ bets, onImported }: { bets: Bet[]; onImporte
       setPushError(err instanceof Error ? err.message : 'Failed to enable notifications');
     } finally {
       setPushBusy(false);
+    }
+  }
+
+  // Runs the same CLV-capture + stale-pending-bet-push job the scheduled
+  // cron endpoint runs, on demand — handy for testing without curl, or for
+  // hosts where wiring up a real scheduler isn't done yet. Admin-session
+  // gated (src/app/api/admin/cron-tick), not the CRON_SECRET-gated route.
+  async function runScheduledJobsNow() {
+    setTickBusy(true);
+    setTickError('');
+    setTickResult('');
+
+    try {
+      const res = await fetch('/api/admin/cron-tick', { method: 'POST' });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to run');
+      }
+
+      const clvLine = data.clv.ran
+        ? `CLV: ${data.clv.requestsUsed} request${data.clv.requestsUsed !== 1 ? 's' : ''} used, ${data.clv.legsUpdated} leg${data.clv.legsUpdated !== 1 ? 's' : ''} updated.`
+        : `CLV: skipped (${data.clv.reason}).`;
+      const pushLine = data.push.ran
+        ? `Push: ${data.push.staleBets} stale bet${data.push.staleBets !== 1 ? 's' : ''}, ${data.push.notified} device${data.push.notified !== 1 ? 's' : ''} notified.`
+        : `Push: skipped (${data.push.reason}).`;
+
+      setTickResult(`${clvLine} ${pushLine}`);
+      onImported();
+    } catch (err) {
+      setTickError(err instanceof Error ? err.message : 'Failed to run');
+    } finally {
+      setTickBusy(false);
     }
   }
 
@@ -256,6 +292,24 @@ export default function DataAdmin({ bets, onImported }: { bets: Bet[]; onImporte
           {normalizing ? 'Normalizing…' : 'Normalize Market Names'}
         </button>
         {normalizeResult && <p style={{ fontSize: 12, color: 'var(--won)', marginTop: 10 }}>{normalizeResult}</p>}
+      </div>
+
+      <div style={SECTION}>
+        <p style={SECTION_TITLE}>SCHEDULED JOBS</p>
+        <p style={{ fontSize: 11.5, color: 'var(--text-faint)', marginBottom: 12, maxWidth: '55ch' }}>
+          Closing Line Value capture and stale-pending-bet notifications normally run from a scheduler hitting{' '}
+          <code>/api/cron/tick</code> (see the README). Run them right now instead — useful for testing, or if you
+          haven&apos;t wired up a scheduler yet. Each does nothing if its own env vars aren&apos;t configured.
+        </p>
+        <button
+          onClick={runScheduledJobsNow}
+          disabled={tickBusy}
+          style={{ ...BTN, cursor: tickBusy ? 'not-allowed' : 'pointer', opacity: tickBusy ? 0.6 : 1 }}
+        >
+          {tickBusy ? 'Running…' : 'Run Now'}
+        </button>
+        {tickResult && <p style={{ fontSize: 12, color: 'var(--won)', marginTop: 10 }}>{tickResult}</p>}
+        {tickError && <p style={{ fontSize: 12, color: 'var(--lost)', marginTop: 10 }}>{tickError}</p>}
       </div>
 
       {pushSupported && (

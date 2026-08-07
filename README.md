@@ -125,6 +125,8 @@ Two more optional, free features. Both rely on something the app doesn't do on i
 
 **Push notifications** — a browser notification when a `pending` bet's event has clearly passed (6+ hours) and it's still unsettled. Free and browser-native, no third-party push service. Generate a keypair once with `npx web-push generate-vapid-keys`, set `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`/`VAPID_SUBJECT`/`NEXT_PUBLIC_VAPID_PUBLIC_KEY`, then click "Enable Notifications" in the admin Data tab.
 
+There's also a **"Run Now"** button in the admin Data tab, under Scheduled Jobs — it runs the exact same job on demand (gated by your admin PIN, not `CRON_SECRET`), for testing or if you haven't wired up a scheduler yet.
+
 **Wiring up the scheduler:**
 
 - **Vercel**: nothing extra to do — this repo ships a `vercel.json` cron entry (once daily, 06:00 UTC) that calls the endpoint, and Vercel automatically sends the `Authorization: Bearer $CRON_SECRET` header for you as long as that env var is set. Daily is a **Hobby-plan requirement**, not just a default — Hobby accounts reject any cron expression that would run more than once a day, and the deployment fails outright (not just the cron job) if `vercel.json` violates it. On Pro or higher you can edit the schedule to run more often, e.g. `"0 */6 * * *"` for every 6 hours, for tighter closing-line capture.
